@@ -1,0 +1,48 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "timezone": "Europe/Paris",
+  "schedule": ["after 7am and before 10am"],
+  "addLabels": ["dependencies"],
+  "semanticCommitType": "chore",
+  "prConcurrentLimit": 0,
+  "prHourlyLimit": 0,
+  "rebaseWhen": "behind-base-branch",
+  "enabledManagers": ["dockerfile", "github-actions", "gomod", "npm"],
+  "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths", "npmDedupe"],
+  "packageRules": [
+    {
+      "description": "Group all Dockerfile base image updates (multi-stage)",
+      "matchManagers": ["dockerfile"],
+      "groupName": "dockerfile",
+      "automerge": false
+    },
+    {
+      "description": "Auto-merge Go patch and minor updates (stable ecosystem)",
+      "matchManagers": ["gomod"],
+      "matchDatasources": ["go"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "rangeStrategy": "semver",
+      "automerge": true
+    },
+    {
+      "description": "Group all GitHub Actions updates",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "automerge": false
+    },
+    {
+      "description": "Auto-merge npm patch and minor updates",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "groupName": "npm patch and minor",
+      "automerge": true
+    },
+    {
+      "description": "npm major updates are separate PRs",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["major"],
+      "automerge": false
+    }
+  ]
+}
