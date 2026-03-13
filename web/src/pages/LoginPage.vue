@@ -1,34 +1,34 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { reactive, ref } from "vue"
 
 const state = reactive({
-  username: '',
-  password: ''
+  username: "",
+  password: "",
 })
 
-const error = ref('')
+const error = ref("")
 const loading = ref(false)
 const showPassword = ref(false)
 
 async function onSubmit() {
-  error.value = ''
+  error.value = ""
   loading.value = true
 
   try {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(state)
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(state),
     })
 
     if (!res.ok) {
-      error.value = 'Invalid username or password'
+      error.value = "Invalid username or password"
       return
     }
 
-    window.location.href = '/'
+    window.location.href = "/"
   } catch {
-    error.value = 'Unable to connect to server'
+    error.value = "Unable to connect to server"
   } finally {
     loading.value = false
   }
@@ -38,10 +38,11 @@ async function onSubmit() {
 <template>
   <div class="min-h-screen bg-[#1f1f1f] flex items-center justify-center px-4">
     <div class="w-full max-w-sm">
-
       <!-- Logo -->
       <div class="flex flex-col items-center mb-8 gap-3">
-        <div class="w-14 h-14 rounded-2xl bg-primary-500 flex items-center justify-center shadow-lg">
+        <div
+          class="w-14 h-14 rounded-2xl bg-primary-500 flex items-center justify-center shadow-lg"
+        >
           <UIcon name="i-lucide-image" class="w-8 h-8 text-white" />
         </div>
         <div class="text-center">
@@ -52,8 +53,7 @@ async function onSubmit() {
 
       <!-- Card -->
       <UCard variant="soft" class="bg-[#282828] border-neutral-700/50">
-        <form @submit.prevent="onSubmit" class="flex flex-col gap-5">
-
+        <form class="flex flex-col gap-5" @submit.prevent="onSubmit">
           <UFormField label="Username" name="username">
             <UInput
               v-model="state.username"
@@ -83,8 +83,8 @@ async function onSubmit() {
                   variant="ghost"
                   color="neutral"
                   size="sm"
-                  @click="showPassword = !showPassword"
                   tabindex="-1"
+                  @click="showPassword = !showPassword"
                 />
               </template>
             </UInput>
@@ -106,10 +106,8 @@ async function onSubmit() {
           >
             Sign in
           </UButton>
-
         </form>
       </UCard>
-
     </div>
   </div>
 </template>
