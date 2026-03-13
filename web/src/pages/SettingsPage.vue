@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { VueDraggable } from 'vue-draggable-plus'
+import { ref, onMounted } from "vue"
+import { VueDraggable } from "vue-draggable-plus"
 
 const toast = useToast()
 const saving = ref(false)
@@ -15,32 +15,37 @@ interface Source {
 
 // Read-only from env vars — fetched from backend
 const env = ref({
-  plexUrl: '',
-  plexToken: '',
+  plexUrl: "",
+  plexToken: "",
   authEnabled: false,
-  authUser: ''
+  authUser: "",
 })
 
 // Editable — stored in SQLite, order matters
 const sources = ref<Source[]>([
-  { id: 'tmdb',        label: 'TMDB',        description: 'The Movie Database',      enabled: true  },
-  { id: 'tvdb',        label: 'TVDB',        description: 'The TV Database',         enabled: true  },
-  { id: 'fanart',      label: 'Fanart.tv',   description: 'Community artwork',       enabled: false },
-  { id: 'mediux',      label: 'Mediux.pro',  description: 'Curated poster sets',     enabled: false },
-  { id: 'theposterdb', label: 'ThePosterDB', description: 'Community poster database', enabled: false }
+  { id: "tmdb", label: "TMDB", description: "The Movie Database", enabled: true },
+  { id: "tvdb", label: "TVDB", description: "The TV Database", enabled: true },
+  { id: "fanart", label: "Fanart.tv", description: "Community artwork", enabled: false },
+  { id: "mediux", label: "Mediux.pro", description: "Curated poster sets", enabled: false },
+  {
+    id: "theposterdb",
+    label: "ThePosterDB",
+    description: "Community poster database",
+    enabled: false,
+  },
 ])
 
 const options = ref({ autoResize: true })
 
 onMounted(async () => {
   try {
-    const res = await fetch('/api/settings')
+    const res = await fetch("/api/settings")
     if (res.ok) {
       const data = await res.json()
-      env.value.plexUrl     = data.plex_url     ?? ''
-      env.value.plexToken   = data.plex_token   ?? ''
+      env.value.plexUrl = data.plex_url ?? ""
+      env.value.plexToken = data.plex_token ?? ""
       env.value.authEnabled = data.auth_enabled ?? false
-      env.value.authUser    = data.auth_user    ?? ''
+      env.value.authUser = data.auth_user ?? ""
       options.value.autoResize = data.auto_resize ?? true
 
       if (Array.isArray(data.sources)) {
@@ -55,14 +60,14 @@ onMounted(async () => {
 async function save() {
   saving.value = true
   try {
-    await fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sources: sources.value, options: options.value })
+    await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sources: sources.value, options: options.value }),
     })
-    toast.add({ title: 'Settings saved', color: 'primary', icon: 'i-lucide-check-circle' })
+    toast.add({ title: "Settings saved", color: "primary", icon: "i-lucide-check-circle" })
   } catch {
-    toast.add({ title: 'Failed to save settings', color: 'error', icon: 'i-lucide-circle-x' })
+    toast.add({ title: "Failed to save settings", color: "error", icon: "i-lucide-circle-x" })
   } finally {
     saving.value = false
   }
@@ -71,16 +76,9 @@ async function save() {
 
 <template>
   <div class="min-h-screen bg-[#1f1f1f] text-white">
-
     <!-- Header -->
     <header class="border-b border-neutral-800 px-6 py-4 flex items-center gap-4">
-      <UButton
-        to="/"
-        icon="i-lucide-arrow-left"
-        variant="ghost"
-        color="neutral"
-        size="sm"
-      />
+      <UButton to="/" icon="i-lucide-arrow-left" variant="ghost" color="neutral" size="sm" />
       <div class="flex items-center gap-2">
         <div class="w-7 h-7 rounded-lg bg-primary-500 flex items-center justify-center">
           <UIcon name="i-lucide-image" class="w-4 h-4 text-white" />
@@ -90,12 +88,7 @@ async function save() {
       <USeparator orientation="vertical" class="h-5" />
       <h1 class="text-sm font-medium text-neutral-300">Settings</h1>
       <div class="ml-auto">
-        <UButton
-          :loading="saving"
-          icon="i-lucide-save"
-          size="sm"
-          @click="save"
-        >
+        <UButton :loading="saving" icon="i-lucide-save" size="sm" @click="save">
           Save changes
         </UButton>
       </div>
@@ -103,7 +96,6 @@ async function save() {
 
     <!-- Content -->
     <div class="max-w-2xl mx-auto px-6 py-10 flex flex-col gap-8">
-
       <!-- Plex Server (read-only) -->
       <section>
         <div class="mb-4">
@@ -120,19 +112,23 @@ async function save() {
           <div class="flex flex-col gap-4">
             <div class="flex flex-col gap-1">
               <span class="text-xs font-medium text-neutral-400">Server URL</span>
-              <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/60 border border-neutral-700/50">
+              <div
+                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/60 border border-neutral-700/50"
+              >
                 <UIcon name="i-lucide-globe" class="w-4 h-4 text-neutral-500 shrink-0" />
                 <span class="text-sm text-neutral-300 font-mono">
-                  {{ loading ? '—' : (env.plexUrl || 'Not set — PLEX_URL') }}
+                  {{ loading ? "—" : env.plexUrl || "Not set — PLEX_URL" }}
                 </span>
               </div>
             </div>
             <div class="flex flex-col gap-1">
               <span class="text-xs font-medium text-neutral-400">Plex Token</span>
-              <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/60 border border-neutral-700/50">
+              <div
+                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/60 border border-neutral-700/50"
+              >
                 <UIcon name="i-lucide-key" class="w-4 h-4 text-neutral-500 shrink-0" />
                 <span class="text-sm text-neutral-300 font-mono">
-                  {{ loading ? '—' : (env.plexToken ? '••••••••••••••••' : 'Not set — PLEX_TOKEN') }}
+                  {{ loading ? "—" : env.plexToken ? "••••••••••••••••" : "Not set — PLEX_TOKEN" }}
                 </span>
                 <UBadge
                   v-if="!loading && env.plexToken"
@@ -155,7 +151,9 @@ async function save() {
             <UIcon name="i-lucide-images" class="w-4 h-4 text-primary-500" />
             Poster Sources
           </h2>
-          <p class="text-sm text-neutral-500 mt-0.5">Select which sources to query when fetching posters</p>
+          <p class="text-sm text-neutral-500 mt-0.5">
+            Select which sources to query when fetching posters
+          </p>
         </div>
         <UCard variant="soft" class="bg-[#282828] border-neutral-700/50">
           <VueDraggable
@@ -198,7 +196,9 @@ async function save() {
           <div class="flex items-center justify-between">
             <div>
               <p class="text-sm font-medium text-white">Auto-resize images</p>
-              <p class="text-xs text-neutral-500">Automatically resize uploaded posters to Plex-compatible dimensions</p>
+              <p class="text-xs text-neutral-500">
+                Automatically resize uploaded posters to Plex-compatible dimensions
+              </p>
             </div>
             <USwitch v-model="options.autoResize" />
           </div>
@@ -222,7 +222,9 @@ async function save() {
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm font-medium text-white">Login protection</p>
-                <p class="text-xs text-neutral-500">Set via <code class="text-primary-400">AUTH_ENABLED</code> env var</p>
+                <p class="text-xs text-neutral-500">
+                  Set via <code class="text-primary-400">AUTH_ENABLED</code> env var
+                </p>
               </div>
               <UBadge
                 :label="env.authEnabled ? 'Enabled' : 'Disabled'"
@@ -234,16 +236,20 @@ async function save() {
               <USeparator />
               <div class="flex flex-col gap-1">
                 <span class="text-xs font-medium text-neutral-400">Username</span>
-                <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/60 border border-neutral-700/50">
+                <div
+                  class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/60 border border-neutral-700/50"
+                >
                   <UIcon name="i-lucide-user" class="w-4 h-4 text-neutral-500 shrink-0" />
                   <span class="text-sm text-neutral-300 font-mono">
-                    {{ env.authUser || 'Not set — AUTH_USER' }}
+                    {{ env.authUser || "Not set — AUTH_USER" }}
                   </span>
                 </div>
               </div>
               <div class="flex flex-col gap-1">
                 <span class="text-xs font-medium text-neutral-400">Password</span>
-                <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/60 border border-neutral-700/50">
+                <div
+                  class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/60 border border-neutral-700/50"
+                >
                   <UIcon name="i-lucide-lock" class="w-4 h-4 text-neutral-500 shrink-0" />
                   <span class="text-sm text-neutral-300 font-mono">••••••••</span>
                   <UBadge label="Set" color="success" variant="soft" size="xs" class="ml-auto" />
@@ -256,16 +262,10 @@ async function save() {
 
       <!-- Save -->
       <div class="flex justify-end pt-2 pb-6">
-        <UButton
-          :loading="saving"
-          icon="i-lucide-save"
-          size="lg"
-          @click="save"
-        >
+        <UButton :loading="saving" icon="i-lucide-save" size="lg" @click="save">
           Save changes
         </UButton>
       </div>
-
     </div>
   </div>
 </template>

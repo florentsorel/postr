@@ -1,0 +1,36 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+
+  - repo: local
+    hooks:
+      - id: eslint
+        name: ESLint (Vue/TS)
+        language: node
+        entry: bash -c 'cd web && npm run lint'
+        files: ^web/.*\.(ts|vue|js)$
+        pass_filenames: false
+
+      - id: prettier
+        name: Prettier (Vue/TS)
+        language: node
+        entry: bash -c 'cd web && npm run format:check'
+        files: ^web/.*\.(ts|vue|js|css|json)$
+        pass_filenames: false
+
+      - id: vue-tsc
+        name: TypeScript check (Vue)
+        language: node
+        entry: bash -c 'cd web && npx vue-tsc -b --noEmit'
+        files: ^web/.*\.(ts|vue)$
+        pass_filenames: false
