@@ -22,7 +22,6 @@
       "matchManagers": ["gomod"],
       "matchDatasources": ["go"],
       "matchUpdateTypes": ["patch", "minor"],
-      "rangeStrategy": "semver",
       "automerge": true
     },
     {
