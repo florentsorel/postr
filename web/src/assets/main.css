@@ -1,0 +1,16 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+@theme static {
+  --color-plex-50: #fefbec;
+  --color-plex-100: #fdf3c8;
+  --color-plex-200: #fbe793;
+  --color-plex-300: #f9d55a;
+  --color-plex-400: #f7c227;
+  --color-plex-500: #e5a00d;
+  --color-plex-600: #cc7d08;
+  --color-plex-700: #a85a0a;
+  --color-plex-800: #89460f;
+  --color-plex-900: #713b10;
+  --color-plex-950: #411e04;
+}

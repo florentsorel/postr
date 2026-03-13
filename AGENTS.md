@@ -14,7 +14,7 @@ Postr allows users to browse their Plex library and replace poster images for mo
 
 | Layer      | Technology                                         |
 | ---------- | -------------------------------------------------- |
-| Backend    | Go (no framework, standard library)                |
+| Backend    | Go with Echo v5                                    |
 | Frontend   | Vue 3 + Vite, TypeScript 5.9+                      |
 | UI Library | Nuxt UI v4 (standalone, includes Tailwind CSS v4)  |
 | Routing    | Vue Router                                         |
@@ -62,15 +62,23 @@ Each media item supports two ways to change its poster:
 
 ### 3. Settings
 
-- Toggle which poster sources are enabled.
-- Option to enable/disable automatic image resizing on upload.
-- Authentication credentials (see below).
+Two categories of settings:
+
+**Editable (stored in SQLite):**
+- Toggle which poster sources are enabled (TMDB, TVDB, Fanart.tv, Mediux, ThePosterDB)
+- Option to enable/disable automatic image resizing on upload
+
+**Read-only (from environment variables, displayed in UI but not editable):**
+- Plex server URL and token — set via `PLEX_URL` / `PLEX_TOKEN`
+- Auth status, username — set via `AUTH_ENABLED` / `AUTH_USER` / `AUTH_PASS`
+
+The backend exposes `GET /api/settings` which returns both env-based config (read-only) and DB-stored settings. Only DB-stored settings are accepted on `POST /api/settings`.
 
 ### 4. Authentication (Optional)
 
 - A login form protects the app for users who expose it to the public internet.
-- Credentials (username + password) are configured via environment variables — no database storage for now.
-- Authentication can be disabled for purely local/homelab use.
+- All auth credentials are configured exclusively via environment variables — no database storage.
+- Authentication can be disabled for purely local/homelab use by setting `AUTH_ENABLED=false`.
 
 ---
 
@@ -97,7 +105,7 @@ Each media item supports two ways to change its poster:
 
 ## Docker
 
-The application is packaged as a single Docker image containing both the Go backend and the built React frontend (served as static files by the Go server).
+The application is packaged as a single Docker image containing both the Go backend and the built Vue frontend (served as static files by the Go server).
 
 ---
 
@@ -105,12 +113,14 @@ The application is packaged as a single Docker image containing both the Go back
 
 ```
 postr/
-├── main.go
+├── cmd/
+│   └── api/
+│       └── main.go   # Application entrypoint
 ├── plex/             # Plex API client
 ├── db/               # SQLite models & queries
 ├── handlers/         # HTTP handlers
 ├── sources/          # Poster source fetchers (TMDB, TVDB, etc.)
-├── web/              # React + Vite app
+├── web/              # Vue + Vite app
 │   ├── src/
 │   │   ├── components/
 │   │   ├── pages/
