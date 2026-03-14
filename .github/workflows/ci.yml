@@ -1,4 +1,4 @@
-name: Web
+name: App
 
 on:
   merge_group:
@@ -9,74 +9,88 @@ on:
       - opened
       - synchronize
       - reopened
-    paths:
-      - "web/**"
-      - ".github/workflows/web.yml"
   push:
     branches:
       - main
-    paths:
-      - "web/**"
-      - ".github/workflows/web.yml"
-
-defaults:
-  run:
-    working-directory: web
 
 jobs:
-  lint:
-    name: Lint & Format
+  go-lint:
+    name: Go Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+          cache: false
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.11.3
+          args: --timeout=10m
 
+  go-test:
+    name: Go Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+      - name: Test
+        run: make test
+
+  web-lint:
+    name: Web Lint & Format
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: "lts/krypton"
           cache: npm
           cache-dependency-path: web/package-lock.json
-
       - name: Install dependencies
         run: npm ci
-
       - name: ESLint
         run: npm run lint
-
       - name: Prettier
         run: npm run format:check
 
-  typecheck:
-    name: TypeScript
+  web-typecheck:
+    name: Web TypeScript
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
     steps:
       - uses: actions/checkout@v6
-
       - uses: actions/setup-node@v6
         with:
           node-version: "lts/krypton"
           cache: npm
           cache-dependency-path: web/package-lock.json
-
       - name: Install dependencies
         run: npm ci
-
       - name: Type check
         run: npm run build
 
-  test:
-    name: Tests
+  web-test:
+    name: Web Tests
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
     steps:
       - uses: actions/checkout@v6
-
       - uses: actions/setup-node@v6
         with:
           node-version: "lts/krypton"
           cache: npm
           cache-dependency-path: web/package-lock.json
-
       - name: Install dependencies
         run: npm ci
-
       - name: Vitest
         run: npm test
