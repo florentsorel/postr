@@ -34,7 +34,11 @@ const typeLabel: Record<MediaType, string> = {
         :alt="title"
         class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
       />
-      <div v-else class="w-full h-full flex items-center justify-center">
+      <div
+        v-else
+        class="w-full h-full flex items-center justify-center"
+        data-testid="poster-fallback"
+      >
         <UIcon name="i-lucide-image-off" class="w-8 h-8 text-neutral-600" />
       </div>
 
