@@ -1,4 +1,4 @@
-import { defineConfig } from "vite"
+import { defineConfig } from "vitest/config"
 import vue from "@vitejs/plugin-vue"
 import ui from "@nuxt/ui/vite"
 
@@ -33,4 +33,9 @@ export default defineConfig({
       },
     }),
   ],
+  test: {
+    environment: "happy-dom",
+    globals: true,
+    setupFiles: ["./src/test/setup.ts"],
+  },
 })
