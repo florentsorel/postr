@@ -40,25 +40,27 @@ Postr allows users to browse their Plex library and replace poster images for mo
   - TV Series
   - Season posters
   - Collections
-- Imported media is stored locally in SQLite and displayed in a responsive grid layout.
+- Imported media metadata is stored locally in SQLite (title, type, year, `added_at` timestamp from Plex).
+- During import, the current Plex poster for each item is **downloaded and stored locally** at `/data/posters/{type}/{id}.jpg`. Thumbnails are never served directly from Plex URLs (which require auth) — they are served by the Go backend at `/api/media/{id}/thumb`.
+- Smart comparison: a poster is only written to disk if its content differs from the existing local file.
 
 ### 2. Poster Management
 
-Each media item supports two ways to change its poster:
+Each media card exposes two actions on hover:
 
-**a) Local Upload**
-- User uploads an image file directly.
-- Optional setting to auto-resize the image to Plex-compatible dimensions.
+**a) Change Poster**
+- Opens a modal to pick a new poster via upload or external source fetch.
+- Once confirmed, the new poster is saved locally **and automatically pushed to Plex** in one step.
+- Upload: user uploads an image file directly. Optional auto-resize to Plex-compatible dimensions.
+- Fetch: queries the enabled poster sources (TMDB, TVDB, Fanart.tv, Mediux, ThePosterDB) and displays results to pick from.
 
-**b) Fetch from External Sources**
-- Supported poster sources:
-  - [TMDB](https://www.themoviedb.org/)
-  - [TVDB](https://thetvdb.com/)
-  - [Fanart.tv](https://fanart.tv/)
-  - [Mediux.pro](https://mediux.pro/)
-  - [ThePosterDB](https://theposterdb.com/)
-- In Settings, the user selects which sources are active (multiple allowed).
-- When clicking "Change Poster" on a media item, the fetch only queries the selected sources.
+**b) Send to Plex**
+- Pushes the locally stored poster to Plex without picking a new one.
+- Useful to restore a poster if Plex lost or overwrote it outside of Postr.
+
+**c) Get from Plex**
+- Re-downloads the poster currently set in Plex for that item and overwrites the local copy.
+- Useful for resyncing when a poster was changed directly in Plex outside of Postr, or as a manual backup.
 
 ### 3. Settings
 
@@ -84,9 +86,15 @@ The backend exposes `GET /api/settings` which returns both env-based config (rea
 
 ## UI / UX
 
-- Media library is displayed in a **grid layout** after import.
-- Each card shows the current poster thumbnail, title, and a "Change Poster" action button.
-- The interface should feel clean and media-focused — take visual inspiration from media manager UIs (e.g., poster grids similar to Plex/Jellyfin dashboards).
+- Media library is displayed in a **responsive grid layout** after import (2→3→4→5→6 columns).
+- Each card shows the locally stored poster thumbnail, title, type badge, and year.
+- On hover: **Change Poster**, **Send to Plex**, and **Get from Plex** action buttons appear.
+- Tabs filter by type: All / Movies / TV Series / Seasons / Collections.
+- Sort options: Title (A–Z), Type, Year, Recently Added (`addedAt` from Plex, stored in SQLite).
+- Search bar filters by title in real time across **all items** (not scoped to the current page).
+- Tab, sort, and page are reflected in the URL as query params (`?tab=movie&sort=year&page=2`). The search is local-only (not in the URL). Page is preserved across tab/sort changes and clamped when search reduces the result count.
+- Empty state shown when no media has been imported yet, with a CTA to trigger the import.
+- The interface should feel clean and media-focused — dark theme with Plex yellow (`#E5A00D`) as primary color.
 
 ---
 
@@ -100,6 +108,7 @@ The backend exposes `GET /api/settings` which returns both env-based config (rea
 | `AUTH_USER`    | Username for login (if auth enabled)         |
 | `AUTH_PASS`    | Password for login (if auth enabled)         |
 | `DB_PATH`      | Path to SQLite database file                 |
+| `DATA_PATH`    | Path to local poster storage directory       |
 
 ---
 

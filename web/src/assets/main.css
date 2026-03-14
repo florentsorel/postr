@@ -1,6 +1,24 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
 
+/* Media type badges — colors driven by Nuxt UI theme config */
+.badge-movie {
+  background: color-mix(in srgb, var(--ui-movie) 15%, transparent);
+  color: var(--ui-movie);
+}
+.badge-show {
+  background: color-mix(in srgb, var(--ui-show) 15%, transparent);
+  color: var(--ui-show);
+}
+.badge-season {
+  background: color-mix(in srgb, var(--ui-season) 15%, transparent);
+  color: var(--ui-season);
+}
+.badge-collection {
+  background: color-mix(in srgb, var(--ui-collection) 15%, transparent);
+  color: var(--ui-collection);
+}
+
 @theme static {
   --color-plex-50: #fefbec;
   --color-plex-100: #fdf3c8;
