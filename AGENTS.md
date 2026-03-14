@@ -63,10 +63,10 @@ Each media card exposes two actions on hover:
 | TMDB | ✅ | Official REST API, requires API key |
 | TVDB | ✅ | Official REST API v4, requires API key |
 | Fanart.tv | ✅ | Official REST API, requires API key |
-| Mediux | ❌ | No public API — supported via YAML set URLs pasted in "From URL" |
-| ThePosterDB | ❌ | No public API — not integrated programmatically |
+| Mediux | ❌ | No public API — may be supported later via YAML set URLs in "From URL" |
+| ThePosterDB | ❌ | No public API — may be supported later via the ZIP Library feature |
 
-TMDB, TVDB, and Fanart.tv API keys are configurable in Settings. Mediux is supported through its YAML set format only (no search).
+TMDB, TVDB, and Fanart.tv are the only active sources. Mediux and ThePosterDB are not currently integrated — they may be revisited in a future iteration.
 
 **b) Send to Plex**
 - Pushes the locally stored poster to Plex without picking a new one.
