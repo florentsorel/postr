@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from "vue"
 import { useRoute, useRouter } from "vue-router"
+import MediaCard from "../components/MediaCard.vue"
 
 type MediaType = "all" | "movie" | "show" | "season" | "collection"
 type SortKey = "title" | "type" | "year" | "added"
@@ -136,7 +137,7 @@ const paginated = computed(() => {
   return filtered.value.slice(start, start + PER_PAGE)
 })
 
-const typeLabel: Record<Exclude<MediaType, "all">, string> = {
+const TYPE_LABEL: Record<Exclude<MediaType, "all">, string> = {
   movie: "Movie",
   show: "TV Series",
   season: "Season",
@@ -144,7 +145,7 @@ const typeLabel: Record<Exclude<MediaType, "all">, string> = {
 }
 
 const activeTabLabel = computed(
-  () => typeLabel[activeTab.value as Exclude<MediaType, "all">] ?? "items"
+  () => TYPE_LABEL[activeTab.value as Exclude<MediaType, "all">] ?? "items"
 )
 
 async function importFromPlex() {
@@ -336,53 +337,17 @@ function toggleMock() {
           v-else
           class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4"
         >
-          <div
+          <MediaCard
             v-for="item in paginated"
             :key="item.id"
-            class="group flex flex-col gap-2 cursor-pointer"
-          >
-            <!-- Poster -->
-            <div class="relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800">
-              <img
-                v-if="item.thumb"
-                :src="item.thumb"
-                :alt="item.title"
-                class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-              />
-              <div v-else class="w-full h-full flex items-center justify-center">
-                <UIcon name="i-lucide-image-off" class="w-8 h-8 text-neutral-600" />
-              </div>
-
-              <!-- Hover overlay -->
-              <div
-                class="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center gap-2 p-3"
-              >
-                <UButton icon="i-lucide-image" size="sm" variant="solid" block>
-                  Change poster
-                </UButton>
-                <UButton icon="i-lucide-upload" size="sm" variant="outline" color="neutral" block>
-                  Send to Plex
-                </UButton>
-                <UButton icon="i-lucide-download" size="sm" variant="outline" color="neutral" block>
-                  Get from Plex
-                </UButton>
-              </div>
-            </div>
-
-            <!-- Info -->
-            <div class="px-0.5">
-              <p class="text-sm font-medium text-white truncate leading-tight">{{ item.title }}</p>
-              <div class="flex items-center gap-1.5 mt-1">
-                <span
-                  :class="`badge-${item.type}`"
-                  class="inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium"
-                >
-                  {{ typeLabel[item.type] }}
-                </span>
-                <span v-if="item.year" class="text-xs text-neutral-500">{{ item.year }}</span>
-              </div>
-            </div>
-          </div>
+            :title="item.title"
+            :type="item.type"
+            :year="item.year"
+            :thumb="item.thumb"
+            @change-poster="() => {}"
+            @send-to-plex="() => {}"
+            @get-from-plex="() => {}"
+          />
         </div>
 
         <!-- Pagination -->
