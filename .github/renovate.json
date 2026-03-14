@@ -8,7 +8,7 @@
   "prConcurrentLimit": 0,
   "prHourlyLimit": 0,
   "rebaseWhen": "behind-base-branch",
-  "enabledManagers": ["dockerfile", "github-actions", "gomod", "npm"],
+  "enabledManagers": ["custom.regex", "dockerfile", "github-actions", "gomod", "npm"],
   "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths", "npmDedupe"],
   "packageRules": [
     {
@@ -42,6 +42,16 @@
       "matchManagers": ["npm"],
       "matchUpdateTypes": ["major"],
       "automerge": false
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": [".github\\/workflows\\/.*\\.yml"],
+      "matchStrings": [
+        "\\s*uses: (?<depName>.*?)-action@v\\d\\s*with:\\s*version:\\s*(?<currentValue>.*)"
+      ],
+      "datasourceTemplate": "github-releases"
     }
   ]
 }
