@@ -4,7 +4,6 @@ import { VueDraggable } from "vue-draggable-plus"
 
 const toast = useToast()
 const saving = ref(false)
-const loading = ref(true)
 
 interface Source {
   id: string
@@ -26,13 +25,6 @@ const sources = ref<Source[]>([
   { id: "tmdb", label: "TMDB", description: "The Movie Database", enabled: true },
   { id: "tvdb", label: "TVDB", description: "The TV Database", enabled: true },
   { id: "fanart", label: "Fanart.tv", description: "Community artwork", enabled: false },
-  { id: "mediux", label: "Mediux.pro", description: "Curated poster sets", enabled: false },
-  {
-    id: "theposterdb",
-    label: "ThePosterDB",
-    description: "Community poster database",
-    enabled: false,
-  },
 ])
 
 const options = ref({ autoResize: true })
@@ -52,8 +44,8 @@ onMounted(async () => {
         sources.value = data.sources
       }
     }
-  } finally {
-    loading.value = false
+  } catch {
+    // settings will remain at their defaults
   }
 })
 
@@ -117,9 +109,13 @@ async function save() {
               >
                 <UIcon name="i-lucide-globe" class="w-4 h-4 text-neutral-500 shrink-0" />
                 <span class="text-sm text-neutral-300 font-mono">
-                  {{ loading ? "—" : env.plexUrl || "Not set — PLEX_URL" }}
+                  {{ env.plexUrl || "" }}
                 </span>
               </div>
+              <p v-if="!env.plexUrl" class="text-xs text-neutral-500">
+                Set the <code class="text-neutral-400">PLEX_URL</code> environment variable — e.g.
+                <code class="text-neutral-400">http://192.168.1.x:32400</code>
+              </p>
             </div>
             <div class="flex flex-col gap-1">
               <span class="text-xs font-medium text-neutral-400">Plex Token</span>
@@ -128,10 +124,10 @@ async function save() {
               >
                 <UIcon name="i-lucide-key" class="w-4 h-4 text-neutral-500 shrink-0" />
                 <span class="text-sm text-neutral-300 font-mono">
-                  {{ loading ? "—" : env.plexToken ? "••••••••••••••••" : "Not set — PLEX_TOKEN" }}
+                  {{ env.plexToken ? "••••••••••••••••" : "" }}
                 </span>
                 <UBadge
-                  v-if="!loading && env.plexToken"
+                  v-if="env.plexToken"
                   label="Set"
                   color="success"
                   variant="soft"
@@ -139,6 +135,16 @@ async function save() {
                   class="ml-auto"
                 />
               </div>
+              <p v-if="!env.plexToken" class="text-xs text-neutral-500">
+                Set the <code class="text-neutral-400">PLEX_TOKEN</code> environment variable —
+                <a
+                  href="https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-primary-400 hover:text-primary-300 underline"
+                  >how to find your token</a
+                >.
+              </p>
             </div>
           </div>
         </UCard>
@@ -152,7 +158,8 @@ async function save() {
             Poster Sources
           </h2>
           <p class="text-sm text-neutral-500 mt-0.5">
-            Select which sources to query when fetching posters
+            Select and reorder sources — the first enabled one is used by default when fetching
+            posters
           </p>
         </div>
         <UCard variant="soft" class="bg-[#282828] border-neutral-700/50">
