@@ -49,10 +49,24 @@ Postr allows users to browse their Plex library and replace poster images for mo
 Each media card exposes two actions on hover:
 
 **a) Change Poster**
-- Opens a modal to pick a new poster via upload or external source fetch.
+- Opens a modal with three tabs:
+  - **Upload** — user uploads an image file directly. Optional auto-resize to Plex-compatible dimensions.
+  - **Library** — browse images from previously uploaded ZIP packs (see § Poster Library). Displayed as a scrollable grid; user picks one image.
+  - **Find online** — queries enabled poster sources and displays results in a scrollable grid (infinite scroll). Sources are fetched in the order defined in Settings.
+  - **From URL** — user pastes a direct image URL or a Mediux YAML set URL. If a Mediux YAML URL is detected, it is fetched and parsed to display the posters it contains.
 - Once confirmed, the new poster is saved locally **and automatically pushed to Plex** in one step.
-- Upload: user uploads an image file directly. Optional auto-resize to Plex-compatible dimensions.
-- Fetch: queries the enabled poster sources (TMDB, TVDB, Fanart.tv, Mediux, ThePosterDB) and displays results to pick from.
+
+**Poster sources:**
+
+| Source | API | Notes |
+| ------------ | --- | ------------------------------------ |
+| TMDB | ✅ | Official REST API, requires API key |
+| TVDB | ✅ | Official REST API v4, requires API key |
+| Fanart.tv | ✅ | Official REST API, requires API key |
+| Mediux | ❌ | No public API — supported via YAML set URLs pasted in "From URL" |
+| ThePosterDB | ❌ | No public API — not integrated programmatically |
+
+TMDB, TVDB, and Fanart.tv API keys are configurable in Settings. Mediux is supported through its YAML set format only (no search).
 
 **b) Send to Plex**
 - Pushes the locally stored poster to Plex without picking a new one.
@@ -62,12 +76,48 @@ Each media card exposes two actions on hover:
 - Re-downloads the poster currently set in Plex for that item and overwrites the local copy.
 - Useful for resyncing when a poster was changed directly in Plex outside of Postr, or as a manual backup.
 
-### 3. Settings
+### 3. Poster Library (ZIP Import)
+
+A dedicated page (`/library`) for managing locally stored poster packs.
+
+**Purpose:** Sites like ThePosterDB let users download a ZIP containing posters for an entire collection (e.g., all X-Men films + the collection art). Rather than re-uploading the same ZIP every time the "Change Poster" modal is opened, users upload once to the Library and reuse images from there.
+
+**Upload flow:**
+- User uploads a `.zip` file, gives it a friendly display name (e.g., "X-Men Collection" instead of "xmen-pack-by-toto-2024"), and optionally adds **tags** — free-form strings matching the media titles or franchises covered (e.g., `x-men`, `wolverine`, `logan`). A single pack can cover multiple franchises.
+- The backend extracts the ZIP and stores each image at `/data/library/{pack_id}/{filename}`
+- SQLite schema:
+  - `library_packs`: `id`, `name`, `created_at`
+  - `tags`: `id`, `name` (shared vocabulary)
+  - `library_pack_tags`: `pack_id`, `tag_id` (pack ↔ tag association)
+  - `media_tags`: `media_id`, `tag_id` (optional — reserved for future explicit media tagging)
+
+**In the Change Poster modal — "Library" tab:**
+- When the tab opens, packs are **automatically filtered**: if the media item has entries in `media_tags`, matching is done via tag intersection (`pack.tags ∩ media.tags ≠ ∅`); otherwise it falls back to a case-insensitive substring match of the media title against tag names. No tagging required from the user.
+- A "Show all packs" toggle clears the filter to browse the full library — useful when auto-filter misses a match.
+- Images are displayed in a scrollable grid (same UI as "Find online"). User picks one → works like any other poster selection.
+
+**Library page (`/library`):**
+- Lists all packs with name, tag list, image count, and upload date.
+- Upload form: ZIP file input + name field + tag input (pill input, autocomplete from existing tags).
+- Per-pack actions: view images, edit name/tags, delete (removes files + DB record).
+
+**Backend API:**
+- `GET /api/library` — list all packs (id, name, tags, image count, created_at)
+- `POST /api/library` — upload a ZIP + name + tags, returns the created pack
+- `GET /api/library/:id` — list images in a pack
+- `PATCH /api/library/:id` — update name and/or tags
+- `DELETE /api/library/:id` — delete a pack and its files
+- Images served at `/api/library/:id/:filename`
+
+**Storage:** `/data/library/{pack_id}/` — sibling of `/data/posters/`, covered by the same `DATA_PATH` env var.
+
+### 4. Settings
 
 Two categories of settings:
 
 **Editable (stored in SQLite):**
-- Toggle which poster sources are enabled (TMDB, TVDB, Fanart.tv, Mediux, ThePosterDB)
+- Toggle which poster sources are enabled (TMDB, TVDB, Fanart.tv) and their order (drag to reorder — first enabled source is used by default)
+- API keys for TMDB, TVDB, Fanart.tv
 - Option to enable/disable automatic image resizing on upload
 
 **Read-only (from environment variables, displayed in UI but not editable):**
@@ -128,11 +178,12 @@ postr/
 ├── plex/             # Plex API client
 ├── db/               # SQLite models & queries
 ├── handlers/         # HTTP handlers
+├── library/          # ZIP extraction and poster library management
 ├── sources/          # Poster source fetchers (TMDB, TVDB, etc.)
 ├── web/              # Vue + Vite app
 │   ├── src/
 │   │   ├── components/
-│   │   ├── pages/
+│   │   ├── pages/         # LibraryPage, SettingsPage, PosterLibraryPage
 │   │   └── hooks/
 │   └── public/
 ├── Dockerfile

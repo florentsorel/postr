@@ -2,6 +2,7 @@
 import { ref, computed } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import MediaCard from "../components/MediaCard.vue"
+import ChangePosterModal from "../components/ChangePosterModal.vue"
 
 type MediaType = "all" | "movie" | "show" | "season" | "collection"
 type SortKey = "title" | "type" | "year" | "added"
@@ -72,6 +73,18 @@ const page = computed<number>({
 
 const loading = ref(false)
 const importing = ref(false)
+
+const posterModal = ref(false)
+const selectedItem = ref<MediaItem | null>(null)
+
+function openPosterModal(item: MediaItem) {
+  selectedItem.value = item
+  posterModal.value = true
+}
+
+function onPosterConfirm() {
+  // TODO: call API once backend is ready
+}
 
 // Will be replaced by real API data
 const media = ref<MediaItem[]>([])
@@ -344,7 +357,7 @@ function toggleMock() {
             :type="item.type"
             :year="item.year"
             :thumb="item.thumb"
-            @change-poster="() => {}"
+            @change-poster="openPosterModal(item)"
             @send-to-plex="() => {}"
             @get-from-plex="() => {}"
           />
@@ -362,5 +375,7 @@ function toggleMock() {
         </div>
       </template>
     </div>
+
+    <ChangePosterModal v-model:open="posterModal" :item="selectedItem" @confirm="onPosterConfirm" />
   </div>
 </template>
