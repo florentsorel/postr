@@ -6,10 +6,10 @@ import (
 )
 
 type Handler struct {
-	queries *db.Queries
-	config  *config.Config
+	db     *db.Queries
+	config *config.Config
 }
 
 func New(queries *db.Queries, cfg *config.Config) *Handler {
-	return &Handler{queries: queries, config: cfg}
+	return &Handler{db: queries, config: cfg}
 }

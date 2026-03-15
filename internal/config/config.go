@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/caarlos0/env/v11"
 )
@@ -27,10 +28,18 @@ func Load() (*Config, error) {
 	if err := env.Parse(cfg); err != nil {
 		return nil, err
 	}
+	cfg.normalize()
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+func (c *Config) normalize() {
+	if c.PlexURL != "" && !strings.HasPrefix(c.PlexURL, "http://") && !strings.HasPrefix(c.PlexURL, "https://") {
+		c.PlexURL = "http://" + c.PlexURL
+	}
+	c.PlexURL = strings.TrimRight(c.PlexURL, "/")
 }
 
 func (c *Config) validate() error {

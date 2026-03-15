@@ -1,3 +1,4 @@
+/* eslint-disable vue/require-default-prop */
 import { render, screen, cleanup } from "@testing-library/vue"
 import { userEvent } from "@testing-library/user-event"
 import { describe, it, expect, vi, afterEach } from "vitest"

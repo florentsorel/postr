@@ -3,6 +3,27 @@ import { ref, onMounted } from "vue"
 import { VueDraggable } from "vue-draggable-plus"
 import { useApiError } from "@/composables/useApiError"
 
+type PingStatus = "idle" | "loading" | "ok" | "error"
+const pingStatus = ref<PingStatus>("idle")
+const pingError = ref("")
+
+async function testConnection() {
+  pingStatus.value = "loading"
+  try {
+    const res = await fetch("/api/plex/ping")
+    const data = await res.json()
+    if (data.reachable) {
+      pingStatus.value = "ok"
+    } else {
+      pingStatus.value = "error"
+      pingError.value = data.error ?? "Unable to reach Plex server."
+    }
+  } catch {
+    pingStatus.value = "error"
+    pingError.value = "Unable to reach Plex server."
+  }
+}
+
 const toast = useToast()
 const saving = ref(false)
 const { error, handleResponse, handleException } = useApiError()
@@ -147,6 +168,29 @@ async function save() {
                   >how to find your token</a
                 >.
               </p>
+            </div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2 text-sm">
+                <template v-if="pingStatus === 'ok'">
+                  <UIcon name="i-lucide-circle-check" class="w-4 h-4 text-green-400" />
+                  <span class="text-green-400">Connected</span>
+                </template>
+                <template v-else-if="pingStatus === 'error'">
+                  <UIcon name="i-lucide-circle-x" class="w-4 h-4 text-red-400" />
+                  <span class="text-red-400">{{ pingError }}</span>
+                </template>
+              </div>
+              <UButton
+                v-if="env.plexUrl && env.plexToken"
+                size="sm"
+                variant="outline"
+                color="neutral"
+                icon="i-lucide-plug"
+                :loading="pingStatus === 'loading'"
+                @click="testConnection"
+              >
+                Test connection
+              </UButton>
             </div>
           </div>
         </UCard>

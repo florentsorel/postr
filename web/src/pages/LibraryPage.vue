@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from "vue"
+import { ref, computed, onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import MediaCard from "../components/MediaCard.vue"
 import ChangePosterModal from "../components/ChangePosterModal.vue"
+import ImportModal from "../components/ImportModal.vue"
 
 type MediaType = "all" | "movie" | "show" | "season" | "collection"
 type SortKey = "title" | "type" | "year" | "added"
@@ -73,7 +74,17 @@ const page = computed<number>({
 
 const loading = ref(false)
 const importing = ref(false)
+const importModalOpen = ref(false)
+const plexConfigured = ref<boolean | null>(null)
 
+onMounted(async () => {
+  try {
+    const res = await fetch("/api/plex/status")
+    plexConfigured.value = res.ok ? (await res.json()).configured : false
+  } catch {
+    plexConfigured.value = false
+  }
+})
 const posterModal = ref(false)
 const selectedItem = ref<MediaItem | null>(null)
 
@@ -161,10 +172,14 @@ const activeTabLabel = computed(
   () => TYPE_LABEL[activeTab.value as Exclude<MediaType, "all">] ?? "items"
 )
 
-async function importFromPlex() {
+async function importFromPlex(types: string[]) {
   importing.value = true
   try {
-    await fetch("/api/plex/import", { method: "POST" })
+    await fetch("/api/plex/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ types }),
+    })
     const res = await fetch("/api/media")
     if (res.ok) media.value = await res.json()
   } finally {
@@ -241,7 +256,7 @@ function toggleMock() {
           variant="outline"
           color="neutral"
           size="sm"
-          @click="importFromPlex"
+          @click="importModalOpen = true"
         >
           Import from Plex
         </UButton>
@@ -273,14 +288,14 @@ function toggleMock() {
             :loading="importing"
             icon="i-lucide-refresh-cw"
             size="lg"
-            @click="importFromPlex"
+            @click="importModalOpen = true"
           >
             Import from Plex
           </UButton>
-          <p class="text-xs text-neutral-600">
-            Make sure your Plex server is configured in
+          <p v-if="plexConfigured === false" class="text-xs text-neutral-600">
+            Plex server not configured —
             <UButton to="/settings" variant="link" color="primary" size="xs" class="px-0">
-              Settings
+              open Settings
             </UButton>
           </p>
         </div>
@@ -377,5 +392,6 @@ function toggleMock() {
     </div>
 
     <ChangePosterModal v-model:open="posterModal" :item="selectedItem" @confirm="onPosterConfirm" />
+    <ImportModal v-model:open="importModalOpen" @confirm="importFromPlex" />
   </div>
 </template>
