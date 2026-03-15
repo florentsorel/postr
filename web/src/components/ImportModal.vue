@@ -3,36 +3,68 @@ import { ref, computed, watch } from "vue"
 
 type PingStatus = "idle" | "loading" | "ok" | "error"
 
-const props = defineProps<{
-  open: boolean
-}>()
+interface Library {
+  key: string
+  title: string
+  type: string
+  enabled: boolean
+}
 
-const emit = defineEmits<{
-  "update:open": [value: boolean]
-  confirm: [types: string[]]
-}>()
+const SECTION_TYPE: Record<string, string> = {
+  movie: "movie",
+  show: "show",
+  season: "show",
+  collection: "movie",
+}
 
-const MEDIA_TYPES = [
+const ALL_MEDIA_TYPES = [
   { value: "movie", label: "Movies" },
   { value: "show", label: "TV Series" },
   { value: "season", label: "Seasons" },
   { value: "collection", label: "Collections" },
 ]
 
-const selected = ref<string[]>(["movie", "show", "season", "collection"])
+const props = defineProps<{
+  open: boolean
+}>()
+
+const emit = defineEmits<{
+  "update:open": [value: boolean]
+  confirm: [targets: { type: string; sectionKeys: string[] }[]]
+}>()
+
+const selected = ref<string[]>([])
 const pingStatus = ref<PingStatus>("idle")
 const pingError = ref("")
+const libraries = ref<Library[]>([])
+
+function enabledSectionsFor(typeValue: string): Library[] {
+  return libraries.value.filter((l) => l.type === SECTION_TYPE[typeValue] && l.enabled)
+}
+
+const availableTypes = computed(() =>
+  ALL_MEDIA_TYPES.filter((t) => enabledSectionsFor(t.value).length > 0)
+)
 
 async function checkConnection() {
   pingStatus.value = "loading"
+  libraries.value = []
+  selected.value = []
   try {
-    const res = await fetch("/api/plex/ping")
-    const data = await res.json()
-    if (data.reachable) {
+    const [pingRes, libRes] = await Promise.all([fetch("/api/plex/ping"), fetch("/api/libraries")])
+    const pingData = await pingRes.json()
+    if (pingData.reachable) {
       pingStatus.value = "ok"
+      if (libRes.ok) {
+        const data = await libRes.json()
+        libraries.value = data.libraries ?? []
+        selected.value = ALL_MEDIA_TYPES.filter((t) => enabledSectionsFor(t.value).length > 0).map(
+          (t) => t.value
+        )
+      }
     } else {
       pingStatus.value = "error"
-      pingError.value = data.error ?? "Unable to reach Plex server."
+      pingError.value = pingData.error ?? "Unable to reach Plex server."
     }
   } catch {
     pingStatus.value = "error"
@@ -44,14 +76,17 @@ watch(
   () => props.open,
   (v) => {
     if (v) checkConnection()
-    else pingStatus.value = "idle"
   }
 )
 
 const canConfirm = computed(() => selected.value.length > 0 && pingStatus.value === "ok")
 
 function confirm() {
-  emit("confirm", [...selected.value])
+  const targets = selected.value.map((type) => ({
+    type,
+    sectionKeys: enabledSectionsFor(type).map((l) => l.key),
+  }))
+  emit("confirm", targets)
   emit("update:open", false)
 }
 
@@ -96,9 +131,15 @@ function close() {
 
         <USeparator />
 
-        <div class="flex flex-col gap-3">
+        <div
+          v-if="availableTypes.length === 0 && pingStatus === 'ok'"
+          class="text-sm text-neutral-500 px-1"
+        >
+          No libraries enabled. Enable libraries in Settings first.
+        </div>
+        <div v-else class="flex flex-col gap-3">
           <label
-            v-for="type in MEDIA_TYPES"
+            v-for="type in availableTypes"
             :key="type.value"
             class="flex items-center gap-3 px-4 py-3 rounded-lg bg-neutral-800/50 border border-neutral-700/50 cursor-pointer hover:bg-neutral-800 transition-colors"
           >
@@ -109,7 +150,16 @@ function close() {
                   v ? selected.push(type.value) : selected.splice(selected.indexOf(type.value), 1)
               "
             />
-            <span class="text-sm font-medium text-white">{{ type.label }}</span>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-white">{{ type.label }}</p>
+              <p class="text-xs text-neutral-500 mt-0.5 truncate">
+                {{
+                  enabledSectionsFor(type.value)
+                    .map((l) => l.title)
+                    .join(", ")
+                }}
+              </p>
+            </div>
           </label>
         </div>
       </div>

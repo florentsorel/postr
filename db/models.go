@@ -8,6 +8,11 @@ import (
 	"database/sql"
 )
 
+type LibrarySetting struct {
+	SectionKey string
+	Enabled    int64
+}
+
 type Setting struct {
 	ID       int64
 	Type     string
