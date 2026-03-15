@@ -3,6 +3,7 @@ module github.com/florentsorel/postr
 go 1.26.1
 
 require (
+	github.com/caarlos0/env/v11 v11.4.0
 	github.com/labstack/echo/v5 v5.0.4
 	github.com/pressly/goose/v3 v3.27.0
 	modernc.org/sqlite v1.46.1

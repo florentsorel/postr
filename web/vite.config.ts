@@ -1,6 +1,7 @@
 import { defineConfig } from "vitest/config"
 import vue from "@vitejs/plugin-vue"
 import ui from "@nuxt/ui/vite"
+import { fileURLToPath, URL } from "node:url"
 
 export default defineConfig({
   plugins: [
@@ -33,6 +34,16 @@ export default defineConfig({
       },
     }),
   ],
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
+  server: {
+    proxy: {
+      "/api": "http://localhost:8080",
+    },
+  },
   test: {
     environment: "happy-dom",
     globals: true,

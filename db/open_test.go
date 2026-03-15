@@ -21,9 +21,9 @@ func TestOpen_RunsMigrations(t *testing.T) {
 	}
 
 	want := map[string]string{
-		"tmdb":        "true",
-		"tvdb":        "true",
-		"fanart":      "true",
+		"tmdb":        "false",
+		"tvdb":        "false",
+		"fanart":      "false",
 		"auto_resize": "true",
 	}
 

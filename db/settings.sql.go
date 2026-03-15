@@ -98,17 +98,18 @@ func (q *Queries) ListSettingsByType(ctx context.Context, type_ string) ([]Setti
 	return items, nil
 }
 
-const updatePosterSourcePosition = `-- name: UpdatePosterSourcePosition :exec
-UPDATE settings SET position = ? WHERE type = 'poster_source' AND key = ?
+const updatePosterSource = `-- name: UpdatePosterSource :exec
+UPDATE settings SET value = ?, position = ? WHERE type = 'poster_source' AND key = ?
 `
 
-type UpdatePosterSourcePositionParams struct {
+type UpdatePosterSourceParams struct {
+	Value    sql.NullString
 	Position sql.NullInt64
 	Key      string
 }
 
-func (q *Queries) UpdatePosterSourcePosition(ctx context.Context, arg UpdatePosterSourcePositionParams) error {
-	_, err := q.db.ExecContext(ctx, updatePosterSourcePosition, arg.Position, arg.Key)
+func (q *Queries) UpdatePosterSource(ctx context.Context, arg UpdatePosterSourceParams) error {
+	_, err := q.db.ExecContext(ctx, updatePosterSource, arg.Value, arg.Position, arg.Key)
 	return err
 }
 
