@@ -17,13 +17,13 @@ type sourceResponse struct {
 }
 
 type settingsResponse struct {
-	PlexURL     string           `json:"plex_url"`
-	PlexToken   string           `json:"plex_token"`
-	AuthEnabled bool             `json:"auth_enabled"`
-	AuthUser    string           `json:"auth_user"`
-	AuthPassSet bool             `json:"auth_pass_set"`
-	AutoResize  bool             `json:"auto_resize"`
-	Sources     []sourceResponse `json:"sources"`
+	PlexURL      string           `json:"plex_url"`
+	PlexTokenSet bool             `json:"plex_token_set"`
+	AuthEnabled  bool             `json:"auth_enabled"`
+	AuthUser     string           `json:"auth_user"`
+	AuthPassSet  bool             `json:"auth_pass_set"`
+	AutoResize   bool             `json:"auto_resize"`
+	Sources      []sourceResponse `json:"sources"`
 }
 
 var sourceMeta = map[string]struct{ label, description string }{
@@ -35,16 +35,16 @@ var sourceMeta = map[string]struct{ label, description string }{
 func (h *Handler) GetSettings(c *echo.Context) error {
 	settings, err := h.db.ListSettings(c.Request().Context())
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to fetch settings")
+		return jsonInternalError(c)
 	}
 
 	resp := settingsResponse{
-		PlexURL:     h.config.PlexURL,
-		PlexToken:   h.config.PlexToken,
-		AuthEnabled: h.config.AuthEnabled,
-		AuthUser:    h.config.AuthUser,
-		AuthPassSet: h.config.AuthPass != "",
-		AutoResize:  true,
+		PlexURL:      h.config.PlexURL,
+		PlexTokenSet: h.config.PlexToken != "",
+		AuthEnabled:  h.config.AuthEnabled,
+		AuthUser:     h.config.AuthUser,
+		AuthPassSet:  h.config.AuthPass != "",
+		AutoResize:   true,
 	}
 
 	for _, s := range settings {
@@ -58,12 +58,12 @@ func (h *Handler) GetSettings(c *echo.Context) error {
 				ID:          s.Key,
 				Label:       meta.label,
 				Description: meta.description,
-				Enabled:     s.Value.String == "true",
+				Enabled:     s.Value.Valid && s.Value.String == "true",
 				Position:    s.Position.Int64,
 			})
 		case "option":
 			if s.Key == "auto_resize" {
-				resp.AutoResize = s.Value.String == "true"
+				resp.AutoResize = s.Value.Valid && s.Value.String == "true"
 			}
 		}
 	}
@@ -86,7 +86,7 @@ type saveSettingsRequest struct {
 func (h *Handler) SaveSettings(c *echo.Context) error {
 	var req saveSettingsRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return jsonError(c, http.StatusBadRequest, "invalid request body")
 	}
 
 	ctx := c.Request().Context()
@@ -104,7 +104,7 @@ func (h *Handler) SaveSettings(c *echo.Context) error {
 			Position: sql.NullInt64{Int64: int64(i), Valid: true},
 			Key:      s.ID,
 		}); err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to save source")
+			return jsonInternalError(c)
 		}
 	}
 
@@ -117,7 +117,7 @@ func (h *Handler) SaveSettings(c *echo.Context) error {
 		Type:  "option",
 		Key:   "auto_resize",
 	}); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to save options")
+		return jsonInternalError(c)
 	}
 
 	return c.NoContent(http.StatusNoContent)

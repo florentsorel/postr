@@ -40,7 +40,7 @@ interface Source {
 // Read-only from env vars — fetched from backend
 const env = ref({
   plexUrl: "",
-  plexToken: "",
+  plexTokenSet: false,
   authEnabled: false,
   authUser: "",
   authPassSet: false,
@@ -49,19 +49,48 @@ const env = ref({
 const sources = ref<Source[]>([])
 const options = ref({ autoResize: true })
 
+type LibraryStatus = "loading" | "ok" | "not_configured" | "error"
+
+interface Library {
+  key: string
+  title: string
+  type: string
+  enabled: boolean
+}
+
+const libraryStatus = ref<LibraryStatus>("loading")
+const libraryError = ref("")
+const libraries = ref<Library[]>([])
+
 onMounted(async () => {
   try {
-    const res = await fetch("/api/settings")
-    if (!handleResponse(res)) return
-    const data = await res.json()
+    const [settingsRes, librariesRes] = await Promise.all([
+      fetch("/api/settings"),
+      fetch("/api/libraries"),
+    ])
+    if (!handleResponse(settingsRes)) return
+    const data = await settingsRes.json()
     env.value.plexUrl = data.plex_url ?? ""
-    env.value.plexToken = data.plex_token ?? ""
+    env.value.plexTokenSet = data.plex_token_set ?? false
     env.value.authEnabled = data.auth_enabled ?? false
     env.value.authUser = data.auth_user ?? ""
     env.value.authPassSet = data.auth_pass_set ?? false
     options.value.autoResize = data.auto_resize ?? true
     if (Array.isArray(data.sources)) {
       sources.value = [...data.sources].sort((a: Source, b: Source) => a.position - b.position)
+    }
+
+    if (librariesRes.ok) {
+      const libData = await librariesRes.json()
+      if (!libData.configured) {
+        libraryStatus.value = "not_configured"
+      } else if (!libData.reachable) {
+        libraryStatus.value = "error"
+        libraryError.value = libData.error ?? "Unable to reach Plex server."
+      } else {
+        libraryStatus.value = "ok"
+        libraries.value = libData.libraries ?? []
+      }
     }
   } catch {
     handleException()
@@ -73,11 +102,22 @@ onMounted(async () => {
 async function save() {
   saving.value = true
   try {
-    await fetch("/api/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sources: sources.value, options: options.value }),
-    })
+    await Promise.all([
+      fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sources: sources.value, options: options.value }),
+      }),
+      libraryStatus.value === "ok"
+        ? fetch("/api/libraries", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              libraries: libraries.value.map((l) => ({ key: l.key, enabled: l.enabled })),
+            }),
+          })
+        : Promise.resolve(),
+    ])
     toast.add({ title: "Settings saved", color: "primary", icon: "i-lucide-check-circle" })
   } catch {
     toast.add({ title: "Failed to save settings", color: "error", icon: "i-lucide-circle-x" })
@@ -147,10 +187,10 @@ async function save() {
               >
                 <UIcon name="i-lucide-key" class="w-4 h-4 text-neutral-500 shrink-0" />
                 <span class="text-sm text-neutral-300 font-mono">
-                  {{ env.plexToken ? "••••••••••••••••" : "" }}
+                  {{ env.plexTokenSet ? "••••••••••••••••" : "" }}
                 </span>
                 <UBadge
-                  v-if="env.plexToken"
+                  v-if="env.plexTokenSet"
                   label="Set"
                   color="success"
                   variant="soft"
@@ -158,7 +198,7 @@ async function save() {
                   class="ml-auto"
                 />
               </div>
-              <p v-if="!env.plexToken" class="text-xs text-neutral-500">
+              <p v-if="!env.plexTokenSet" class="text-xs text-neutral-500">
                 Set the <code class="text-neutral-400">PLEX_TOKEN</code> environment variable —
                 <a
                   href="https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/"
@@ -181,7 +221,7 @@ async function save() {
                 </template>
               </div>
               <UButton
-                v-if="env.plexUrl && env.plexToken"
+                v-if="env.plexUrl && env.plexTokenSet"
                 size="sm"
                 variant="outline"
                 color="neutral"
@@ -191,6 +231,65 @@ async function save() {
               >
                 Test connection
               </UButton>
+            </div>
+          </div>
+        </UCard>
+      </section>
+
+      <!-- Libraries -->
+      <section>
+        <div class="mb-4">
+          <h2 class="text-base font-semibold text-white flex items-center gap-2">
+            <UIcon name="i-lucide-library" class="w-4 h-4 text-primary-500" />
+            Libraries
+          </h2>
+          <p class="text-sm text-neutral-500 mt-0.5">
+            Choose which Plex libraries to include when importing
+          </p>
+        </div>
+        <UCard variant="soft" class="bg-[#282828] border-neutral-700/50">
+          <!-- Not configured -->
+          <div
+            v-if="libraryStatus === 'not_configured'"
+            class="flex items-center gap-2 text-sm text-neutral-500"
+          >
+            <UIcon name="i-lucide-info" class="w-4 h-4 shrink-0" />
+            Configure your Plex server URL and token above to manage libraries.
+          </div>
+
+          <!-- Loading -->
+          <div
+            v-else-if="libraryStatus === 'loading'"
+            class="flex items-center gap-2 text-sm text-neutral-500"
+          >
+            <UIcon name="i-lucide-loader-circle" class="w-4 h-4 animate-spin shrink-0" />
+            Loading libraries…
+          </div>
+
+          <!-- Error -->
+          <div
+            v-else-if="libraryStatus === 'error'"
+            class="flex items-center gap-2 text-sm text-red-400"
+          >
+            <UIcon name="i-lucide-circle-x" class="w-4 h-4 shrink-0" />
+            {{ libraryError }}
+          </div>
+
+          <!-- List -->
+          <div
+            v-else
+            class="flex flex-col divide-y divide-neutral-700/50 -mx-4 sm:-mx-6 -my-4 sm:-my-6 overflow-hidden"
+          >
+            <div
+              v-for="lib in libraries"
+              :key="lib.key"
+              class="flex items-center justify-between px-4 sm:px-6 py-3"
+            >
+              <div>
+                <p class="text-sm font-medium text-white">{{ lib.title }}</p>
+                <p class="text-xs text-neutral-500 capitalize">{{ lib.type }}</p>
+              </div>
+              <USwitch v-model="lib.enabled" />
             </div>
           </div>
         </UCard>

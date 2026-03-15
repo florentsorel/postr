@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/florentsorel/postr/plex"
 	"github.com/labstack/echo/v5"
 )
 
@@ -14,6 +15,32 @@ type plexStatusResponse struct {
 type plexPingResponse struct {
 	Reachable bool   `json:"reachable"`
 	Error     string `json:"error,omitempty"`
+}
+
+type plexSectionsResponse struct {
+	Sections []plexSection `json:"sections"`
+}
+
+type plexSection struct {
+	Key   string `json:"key"`
+	Type  string `json:"type"`
+	Title string `json:"title"`
+}
+
+func (h *Handler) GetPlexSections(c *echo.Context) error {
+	if h.config.PlexURL == "" || h.config.PlexToken == "" {
+		return c.JSON(http.StatusOK, plexSectionsResponse{Sections: []plexSection{}})
+	}
+	client := plex.NewClient(h.config.PlexURL, h.config.PlexToken)
+	sections, err := client.Sections(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": err.Error()})
+	}
+	out := make([]plexSection, len(sections))
+	for i, s := range sections {
+		out[i] = plexSection{Key: s.Key, Type: s.Type, Title: s.Title}
+	}
+	return c.JSON(http.StatusOK, plexSectionsResponse{Sections: out})
 }
 
 func (h *Handler) GetPlexStatus(c *echo.Context) error {
@@ -34,7 +61,7 @@ func (h *Handler) PingPlex(c *echo.Context) error {
 	req, err := http.NewRequestWithContext(
 		c.Request().Context(),
 		http.MethodGet,
-		h.config.PlexURL+"/identity",
+		h.config.PlexURL+"/library/sections",
 		nil,
 	)
 	if err != nil {
@@ -48,6 +75,9 @@ func (h *Handler) PingPlex(c *echo.Context) error {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusUnauthorized {
+		return c.JSON(http.StatusOK, plexPingResponse{Reachable: false, Error: "Invalid Plex token."})
+	}
 	if resp.StatusCode != http.StatusOK {
 		return c.JSON(http.StatusOK, plexPingResponse{Reachable: false, Error: "Plex returned an unexpected response."})
 	}

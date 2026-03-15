@@ -172,13 +172,13 @@ const activeTabLabel = computed(
   () => TYPE_LABEL[activeTab.value as Exclude<MediaType, "all">] ?? "items"
 )
 
-async function importFromPlex(types: string[]) {
+async function importFromPlex(targets: { type: string; sectionKeys: string[] }[]) {
   importing.value = true
   try {
     await fetch("/api/plex/import", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ types }),
+      body: JSON.stringify({ targets }),
     })
     const res = await fetch("/api/media")
     if (res.ok) media.value = await res.json()
