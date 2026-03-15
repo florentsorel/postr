@@ -7,3 +7,4 @@ linters:
         - (*database/sql.DB).Close
         - (*database/sql.Rows).Close
         - (*os.File).Close
+        - (io.ReadCloser).Close

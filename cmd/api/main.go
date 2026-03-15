@@ -33,6 +33,9 @@ func main() {
 	api.GET("/settings", h.GetSettings)
 	api.POST("/settings", h.SaveSettings)
 
+	api.GET("/plex/status", h.GetPlexStatus)
+	api.GET("/plex/ping", h.PingPlex)
+
 	if err := e.Start(":8080"); err != nil {
 		e.Logger.Error("failed to start server", "error", err)
 	}

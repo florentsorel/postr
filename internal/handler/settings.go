@@ -33,7 +33,7 @@ var sourceMeta = map[string]struct{ label, description string }{
 }
 
 func (h *Handler) GetSettings(c *echo.Context) error {
-	settings, err := h.queries.ListSettings(c.Request().Context())
+	settings, err := h.db.ListSettings(c.Request().Context())
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to fetch settings")
 	}
@@ -99,7 +99,7 @@ func (h *Handler) SaveSettings(c *echo.Context) error {
 		if s.Enabled {
 			value = "true"
 		}
-		if err := h.queries.UpdatePosterSource(ctx, db.UpdatePosterSourceParams{
+		if err := h.db.UpdatePosterSource(ctx, db.UpdatePosterSourceParams{
 			Value:    sql.NullString{String: value, Valid: true},
 			Position: sql.NullInt64{Int64: int64(i), Valid: true},
 			Key:      s.ID,
@@ -112,7 +112,7 @@ func (h *Handler) SaveSettings(c *echo.Context) error {
 	if req.Options.AutoResize {
 		autoResize = "true"
 	}
-	if err := h.queries.UpdateSetting(ctx, db.UpdateSettingParams{
+	if err := h.db.UpdateSetting(ctx, db.UpdateSettingParams{
 		Value: sql.NullString{String: autoResize, Valid: true},
 		Type:  "option",
 		Key:   "auto_resize",
