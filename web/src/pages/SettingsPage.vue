@@ -1,15 +1,19 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue"
 import { VueDraggable } from "vue-draggable-plus"
+import { useApiError } from "@/composables/useApiError"
 
 const toast = useToast()
 const saving = ref(false)
+const { error, handleResponse, handleException } = useApiError()
+const loading = ref(true)
 
 interface Source {
   id: string
   label: string
   description: string
   enabled: boolean
+  position: number
 }
 
 // Read-only from env vars — fetched from backend
@@ -18,34 +22,30 @@ const env = ref({
   plexToken: "",
   authEnabled: false,
   authUser: "",
+  authPassSet: false,
 })
 
-// Editable — stored in SQLite, order matters
-const sources = ref<Source[]>([
-  { id: "tmdb", label: "TMDB", description: "The Movie Database", enabled: true },
-  { id: "tvdb", label: "TVDB", description: "The TV Database", enabled: true },
-  { id: "fanart", label: "Fanart.tv", description: "Community artwork", enabled: false },
-])
-
+const sources = ref<Source[]>([])
 const options = ref({ autoResize: true })
 
 onMounted(async () => {
   try {
     const res = await fetch("/api/settings")
-    if (res.ok) {
-      const data = await res.json()
-      env.value.plexUrl = data.plex_url ?? ""
-      env.value.plexToken = data.plex_token ?? ""
-      env.value.authEnabled = data.auth_enabled ?? false
-      env.value.authUser = data.auth_user ?? ""
-      options.value.autoResize = data.auto_resize ?? true
-
-      if (Array.isArray(data.sources)) {
-        sources.value = data.sources
-      }
+    if (!handleResponse(res)) return
+    const data = await res.json()
+    env.value.plexUrl = data.plex_url ?? ""
+    env.value.plexToken = data.plex_token ?? ""
+    env.value.authEnabled = data.auth_enabled ?? false
+    env.value.authUser = data.auth_user ?? ""
+    env.value.authPassSet = data.auth_pass_set ?? false
+    options.value.autoResize = data.auto_resize ?? true
+    if (Array.isArray(data.sources)) {
+      sources.value = [...data.sources].sort((a: Source, b: Source) => a.position - b.position)
     }
   } catch {
-    // settings will remain at their defaults
+    handleException()
+  } finally {
+    loading.value = false
   }
 })
 
@@ -67,7 +67,9 @@ async function save() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#1f1f1f] text-white">
+  <div v-if="loading" class="min-h-screen bg-[#1f1f1f]" />
+  <ErrorLayout v-else-if="error" :code="error.code" :message="error.message" />
+  <div v-else class="min-h-screen bg-[#1f1f1f] text-white">
     <!-- Header -->
     <header class="border-b border-neutral-800 px-6 py-4 flex items-center gap-4">
       <UButton to="/" icon="i-lucide-arrow-left" variant="ghost" color="neutral" size="sm" />
@@ -151,6 +153,7 @@ async function save() {
       </section>
 
       <!-- Poster Sources -->
+
       <section>
         <div class="mb-4">
           <h2 class="text-base font-semibold text-white flex items-center gap-2">
@@ -191,6 +194,7 @@ async function save() {
       </section>
 
       <!-- Options -->
+
       <section>
         <div class="mb-4">
           <h2 class="text-base font-semibold text-white flex items-center gap-2">
@@ -230,7 +234,7 @@ async function save() {
               <div>
                 <p class="text-sm font-medium text-white">Login protection</p>
                 <p class="text-xs text-neutral-500">
-                  Set via <code class="text-primary-400">AUTH_ENABLED</code> env var
+                  Set via <code class="text-primary-400">AUTH_ENABLED</code> environment variable
                 </p>
               </div>
               <UBadge
@@ -248,7 +252,7 @@ async function save() {
                 >
                   <UIcon name="i-lucide-user" class="w-4 h-4 text-neutral-500 shrink-0" />
                   <span class="text-sm text-neutral-300 font-mono">
-                    {{ env.authUser || "Not set — AUTH_USER" }}
+                    {{ env.authUser || "" }}
                   </span>
                 </div>
               </div>
@@ -258,8 +262,17 @@ async function save() {
                   class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/60 border border-neutral-700/50"
                 >
                   <UIcon name="i-lucide-lock" class="w-4 h-4 text-neutral-500 shrink-0" />
-                  <span class="text-sm text-neutral-300 font-mono">••••••••</span>
-                  <UBadge label="Set" color="success" variant="soft" size="xs" class="ml-auto" />
+                  <span class="text-sm text-neutral-300 font-mono">{{
+                    env.authPassSet ? "••••••••" : ""
+                  }}</span>
+                  <UBadge
+                    v-if="env.authPassSet"
+                    label="Set"
+                    color="success"
+                    variant="soft"
+                    size="xs"
+                    class="ml-auto"
+                  />
                 </div>
               </div>
             </template>

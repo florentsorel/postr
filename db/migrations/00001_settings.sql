@@ -9,9 +9,9 @@ CREATE TABLE settings (
 );
 
 INSERT INTO settings (type, key, value, position) VALUES
-    ('poster_source', 'tmdb',   'true', 1),
-    ('poster_source', 'tvdb',   'true', 2),
-    ('poster_source', 'fanart', 'true', 3),
+    ('poster_source', 'tmdb',   'false', 1),
+    ('poster_source', 'tvdb',   'false', 2),
+    ('poster_source', 'fanart', 'false', 3),
     ('option',        'auto_resize', 'true', NULL);
 
 -- +goose Down

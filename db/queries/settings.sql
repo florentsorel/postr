@@ -10,5 +10,5 @@ SELECT * FROM settings WHERE type = ? AND key = ?;
 -- name: UpdateSetting :exec
 UPDATE settings SET value = ? WHERE type = ? AND key = ?;
 
--- name: UpdatePosterSourcePosition :exec
-UPDATE settings SET position = ? WHERE type = 'poster_source' AND key = ?;
+-- name: UpdatePosterSource :exec
+UPDATE settings SET value = ?, position = ? WHERE type = 'poster_source' AND key = ?;
