@@ -8,9 +8,30 @@ import (
 	"database/sql"
 )
 
+type Library struct {
+	ID         int64
+	SectionKey string
+	Title      string
+	Type       string
+	ImportedAt int64
+}
+
 type LibrarySetting struct {
 	SectionKey string
 	Enabled    int64
+}
+
+type Medium struct {
+	ID        int64
+	LibraryID int64
+	RatingKey string
+	Title     string
+	Type      string
+	Year      sql.NullInt64
+	Thumb     sql.NullString
+	AddedAt   sql.NullInt64
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 type Setting struct {

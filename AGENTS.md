@@ -41,8 +41,10 @@ Postr allows users to browse their Plex library and replace poster images for mo
   - Season posters
   - Collections
 - Imported media metadata is stored locally in SQLite (title, type, year, `added_at` timestamp from Plex).
-- During import, the current Plex poster for each item is **downloaded and stored locally** at `/data/posters/{type}/{id}.jpg`. Thumbnails are never served directly from Plex URLs (which require auth) — they are served by the Go backend at `/api/media/{id}/thumb`.
-- Smart comparison: a poster is only written to disk if its content differs from the existing local file.
+- The import streams real-time progress via SSE (`text/event-stream`). The frontend reads the stream and displays a progress bar + final recap.
+- Import stats: **Added** (new items), **Skipped** (existing items whose poster is byte-identical — DB is not touched), **Deleted** (items removed from Plex). Thumbnail download failures appear in a separate errors accordion.
+- During import, the current Plex poster for each item is **downloaded and stored locally** at `/data/posters/{type}/{ratingKey}.jpg`. The filename is the Plex `ratingKey` (string). Thumbnails are never served directly from Plex URLs (which require auth) — they are served by the Go backend at `/api/media/{ratingKey}/thumb`.
+- Smart comparison: for existing items, the poster is downloaded and compared byte-for-byte before any DB write. If identical, the item is counted as skipped and the DB upsert is skipped entirely.
 
 ### 2. Poster Management
 
@@ -182,7 +184,8 @@ The application is packaged as a single Docker image containing both the Go back
 | `GET` | `/api/media` | List imported media items |
 | `GET` | `/api/plex/status` | Check if Plex is configured (URL + token set) |
 | `GET` | `/api/plex/ping` | Test Plex connectivity and token validity |
-| `POST` | `/api/plex/import` | Import media from Plex (by type and section) |
+| `POST` | `/api/plex/import` | Import media from Plex (SSE stream: progress, skip, done events) |
+| `GET` | `/api/media/:ratingKey/thumb` | Serve locally stored poster for a media item |
 
 ## Project Structure
 
@@ -191,14 +194,14 @@ postr/
 ├── cmd/
 │   └── api/
 │       └── main.go        # Application entrypoint
-├── plex/                  # Plex HTTP client
 ├── db/
 │   ├── migrations/        # Goose SQL migrations
 │   ├── queries/           # sqlc query definitions
 │   └── *.sql.go           # Generated sqlc code
 ├── internal/
 │   ├── config/            # Env var config (caarlos0/env)
-│   └── handler/           # HTTP handlers (Echo v5)
+│   ├── handler/           # HTTP handlers (Echo v5)
+│   └── plex/              # Plex HTTP client (*plex.Client constructed once in main.go)
 ├── web/                   # Vue 3 + Vite frontend
 │   └── src/
 │       ├── components/

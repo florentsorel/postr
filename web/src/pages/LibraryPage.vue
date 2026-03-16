@@ -73,17 +73,25 @@ const page = computed<number>({
 })
 
 const loading = ref(false)
-const importing = ref(false)
 const importModalOpen = ref(false)
 const plexConfigured = ref<boolean | null>(null)
 
 onMounted(async () => {
-  try {
-    const res = await fetch("/api/plex/status")
-    plexConfigured.value = res.ok ? (await res.json()).configured : false
-  } catch {
-    plexConfigured.value = false
+  loading.value = true
+  const [statusRes, mediaRes] = await Promise.allSettled([
+    fetch("/api/plex/status"),
+    fetch("/api/media"),
+  ])
+
+  plexConfigured.value =
+    statusRes.status === "fulfilled" && statusRes.value.ok
+      ? (await statusRes.value.json()).configured
+      : false
+
+  if (mediaRes.status === "fulfilled" && mediaRes.value.ok) {
+    media.value = await mediaRes.value.json()
   }
+  loading.value = false
 })
 const posterModal = ref(false)
 const selectedItem = ref<MediaItem | null>(null)
@@ -125,6 +133,14 @@ const typeOrder: Record<Exclude<MediaType, "all">, number> = {
   collection: 3,
 }
 
+// For title sort: collections surface first when title is identical
+const titleTypeOrder: Record<Exclude<MediaType, "all">, number> = {
+  collection: 0,
+  movie: 1,
+  show: 2,
+  season: 3,
+}
+
 const filtered = computed(() => {
   const byTab =
     activeTab.value === "all" ? media.value : media.value.filter((m) => m.type === activeTab.value)
@@ -139,7 +155,7 @@ const filtered = computed(() => {
     if (sort.value === "year")
       return (b.year ?? 0) - (a.year ?? 0) || a.title.localeCompare(b.title)
     if (sort.value === "added") return (b.addedAt ?? 0) - (a.addedAt ?? 0)
-    return a.title.localeCompare(b.title)
+    return a.title.localeCompare(b.title) || titleTypeOrder[a.type] - titleTypeOrder[b.type]
   })
 })
 
@@ -172,19 +188,9 @@ const activeTabLabel = computed(
   () => TYPE_LABEL[activeTab.value as Exclude<MediaType, "all">] ?? "items"
 )
 
-async function importFromPlex(targets: { type: string; sectionKeys: string[] }[]) {
-  importing.value = true
-  try {
-    await fetch("/api/plex/import", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ targets }),
-    })
-    const res = await fetch("/api/media")
-    if (res.ok) media.value = await res.json()
-  } finally {
-    importing.value = false
-  }
+async function onImported() {
+  const res = await fetch("/api/media")
+  if (res.ok) media.value = await res.json()
 }
 </script>
 
@@ -201,7 +207,6 @@ async function importFromPlex(targets: { type: string; sectionKeys: string[] }[]
 
       <div class="ml-auto flex items-center gap-3">
         <UButton
-          :loading="importing"
           icon="i-lucide-refresh-cw"
           variant="outline"
           color="neutral"
@@ -234,12 +239,7 @@ async function importFromPlex(targets: { type: string; sectionKeys: string[] }[]
               Connect to your Plex server and import your library to start managing poster artwork.
             </p>
           </div>
-          <UButton
-            :loading="importing"
-            icon="i-lucide-refresh-cw"
-            size="lg"
-            @click="importModalOpen = true"
-          >
+          <UButton icon="i-lucide-refresh-cw" size="lg" @click="importModalOpen = true">
             Import from Plex
           </UButton>
           <p v-if="plexConfigured === false" class="text-xs text-neutral-600">
@@ -342,6 +342,6 @@ async function importFromPlex(targets: { type: string; sectionKeys: string[] }[]
     </div>
 
     <ChangePosterModal v-model:open="posterModal" :item="selectedItem" @confirm="onPosterConfirm" />
-    <ImportModal v-model:open="importModalOpen" @confirm="importFromPlex" />
+    <ImportModal v-model:open="importModalOpen" @imported="onImported" />
   </div>
 </template>
