@@ -4,24 +4,27 @@ import { useRoute, useRouter } from "vue-router"
 import MediaCard from "../components/MediaCard.vue"
 import ChangePosterModal from "../components/ChangePosterModal.vue"
 import ImportModal from "../components/ImportModal.vue"
+import { useLibraryUiStore } from "@/stores/useLibraryUiStore"
 
 type MediaType = "all" | "movie" | "show" | "season" | "collection"
-type SortKey = "title" | "type" | "year" | "added"
+type SortKey = "title" | "year" | "added"
 
 interface MediaItem {
   id: string
   title: string
   type: Exclude<MediaType, "all">
   year?: number
+  seasonNumber?: number
   thumb?: string
   addedAt?: number
 }
 
 const route = useRoute()
 const router = useRouter()
+const uiStore = useLibraryUiStore()
 
 const VALID_TABS: MediaType[] = ["all", "movie", "show", "season", "collection"]
-const VALID_SORTS: SortKey[] = ["title", "type", "year", "added"]
+const VALID_SORTS: SortKey[] = ["title", "year", "added"]
 
 function parseTab(v: unknown): MediaType {
   return VALID_TABS.includes(v as MediaType) ? (v as MediaType) : "all"
@@ -38,26 +41,32 @@ function parsePage(v: unknown): number {
 // with route.query, no intermediate refs needed.
 const activeTab = computed<MediaType>({
   get: () => parseTab(route.query.tab),
-  set: (v) =>
+  set: (newTab) => {
+    // Save current sort for current tab, then restore the new tab's sort.
+    uiStore.setSortForTab(parseTab(route.query.tab), parseSort(route.query.sort))
+    const restored = uiStore.getSortForTab(newTab)
+    const newSort = uiStore.isSortAvailable(newTab, restored) ? restored : "added"
     router.replace({
       query: {
-        ...(v !== "all" ? { tab: v } : {}),
-        ...(route.query.sort ? { sort: route.query.sort } : {}),
-        ...(route.query.page ? { page: route.query.page } : {}),
+        ...(newTab !== "all" ? { tab: newTab } : {}),
+        ...(newSort !== "added" ? { sort: newSort } : {}),
       },
-    }),
+    })
+  },
 })
 
 const sort = computed<SortKey>({
   get: () => parseSort(route.query.sort),
-  set: (v) =>
+  set: (v) => {
+    uiStore.setSortForTab(parseTab(route.query.tab), v)
     router.replace({
       query: {
         ...(route.query.tab ? { tab: route.query.tab } : {}),
         ...(v !== "added" ? { sort: v } : {}),
         ...(route.query.page ? { page: route.query.page } : {}),
       },
-    }),
+    })
+  },
 })
 
 const page = computed<number>({
@@ -119,19 +128,15 @@ const tabs = [
 const search = ref("")
 const PER_PAGE = 18
 
-const sortOptions = [
+const ALL_SORT_OPTIONS = [
   { label: "Title (A–Z)", value: "title" },
-  { label: "Type", value: "type" },
   { label: "Year", value: "year" },
   { label: "Recently added", value: "added" },
 ]
 
-const typeOrder: Record<Exclude<MediaType, "all">, number> = {
-  movie: 0,
-  show: 1,
-  season: 2,
-  collection: 3,
-}
+const sortOptions = computed(() =>
+  ALL_SORT_OPTIONS.filter((o) => uiStore.isSortAvailable(activeTab.value, o.value as SortKey))
+)
 
 // For title sort: collections surface first when title is identical
 const titleTypeOrder: Record<Exclude<MediaType, "all">, number> = {
@@ -150,12 +155,14 @@ const filtered = computed(() => {
     : byTab
 
   return [...searched].sort((a, b) => {
-    if (sort.value === "type")
-      return typeOrder[a.type] - typeOrder[b.type] || a.title.localeCompare(b.title)
     if (sort.value === "year")
       return (b.year ?? 0) - (a.year ?? 0) || a.title.localeCompare(b.title)
     if (sort.value === "added") return (b.addedAt ?? 0) - (a.addedAt ?? 0)
-    return a.title.localeCompare(b.title) || titleTypeOrder[a.type] - titleTypeOrder[b.type]
+    return (
+      a.title.localeCompare(b.title) ||
+      titleTypeOrder[a.type] - titleTypeOrder[b.type] ||
+      (a.seasonNumber != null && b.seasonNumber != null ? a.seasonNumber - b.seasonNumber : 0)
+    )
   })
 })
 
@@ -321,6 +328,7 @@ async function onImported() {
             :title="item.title"
             :type="item.type"
             :year="item.year"
+            :season-number="item.seasonNumber"
             :thumb="item.thumb"
             @change-poster="openPosterModal(item)"
             @send-to-plex="() => {}"

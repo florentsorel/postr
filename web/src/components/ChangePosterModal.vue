@@ -174,6 +174,7 @@ watch(
 <template>
   <UModal
     :open="open"
+    class="select-none"
     :dismissible="false"
     :ui="{ overlay: 'items-start pt-10' }"
     :title="item?.title ?? 'Change poster'"

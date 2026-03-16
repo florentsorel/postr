@@ -10,12 +10,13 @@ import (
 )
 
 type mediaResponse struct {
-	ID       int64  `json:"id"`
-	Title    string `json:"title"`
-	Type     string `json:"type"`
-	Year     *int64 `json:"year,omitempty"`
-	Thumb    string `json:"thumb,omitempty"`
-	AddedAt  *int64 `json:"addedAt,omitempty"`
+	ID           int64  `json:"id"`
+	Title        string `json:"title"`
+	Type         string `json:"type"`
+	Year         *int64 `json:"year,omitempty"`
+	SeasonNumber *int64 `json:"seasonNumber,omitempty"`
+	Thumb        string `json:"thumb,omitempty"`
+	AddedAt      *int64 `json:"addedAt,omitempty"`
 }
 
 func (h *Handler) GetMediaThumb(c *echo.Context) error {
@@ -52,6 +53,9 @@ func (h *Handler) GetMedia(c *echo.Context) error {
 		}
 		if m.Thumb.Valid {
 			item.Thumb = "/api/media/" + m.RatingKey + "/thumb"
+		}
+		if m.SeasonNumber.Valid {
+			item.SeasonNumber = &m.SeasonNumber.Int64
 		}
 		if m.AddedAt.Valid {
 			item.AddedAt = &m.AddedAt.Int64

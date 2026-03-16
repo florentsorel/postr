@@ -122,6 +122,15 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 						if err != nil {
 							break
 						}
+						for i := range seasons {
+							seasons[i].Title = show.Title
+							episodes, err := h.plex.Children(ctx, seasons[i].RatingKey)
+							if err == nil && len(episodes) > 0 {
+								seasons[i].Year = episodes[0].SeasonYear()
+							} else {
+								seasons[i].Year = show.Year
+							}
+						}
 						items = append(items, seasons...)
 					}
 				}
@@ -200,15 +209,16 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 			}
 
 			params := db.UpsertMediaParams{
-				LibraryID: library.ID,
-				RatingKey: item.RatingKey,
-				Title:     item.Title,
-				Type:      batch.target.Type,
-				Year:      sql.NullInt64{Int64: int64(item.Year), Valid: item.Year != 0},
-				Thumb:     sql.NullString{String: item.Thumb, Valid: item.Thumb != ""},
-				AddedAt:   sql.NullInt64{Int64: item.AddedAt, Valid: item.AddedAt != 0},
-				CreatedAt: now,
-				UpdatedAt: now,
+				LibraryID:    library.ID,
+				RatingKey:    item.RatingKey,
+				Title:        item.Title,
+				Type:         batch.target.Type,
+				Year:         sql.NullInt64{Int64: int64(item.Year), Valid: item.Year != 0},
+				SeasonNumber: sql.NullInt64{Int64: int64(item.Index), Valid: batch.target.Type == "season" && item.Index != 0},
+				Thumb:        sql.NullString{String: item.Thumb, Valid: item.Thumb != ""},
+				AddedAt:      sql.NullInt64{Int64: item.AddedAt, Valid: item.AddedAt != 0},
+				CreatedAt:    now,
+				UpdatedAt:    now,
 			}
 			if err := h.db.UpsertMedia(ctx, params); err != nil {
 				log.Error("failed to upsert media", "ratingKey", item.RatingKey, "error", err)

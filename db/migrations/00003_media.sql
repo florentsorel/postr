@@ -8,16 +8,17 @@ CREATE TABLE libraries (
 );
 
 CREATE TABLE media (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    library_id  INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
-    rating_key  TEXT    NOT NULL UNIQUE,
-    title       TEXT    NOT NULL,
-    type        TEXT    NOT NULL,
-    year        INTEGER,
-    thumb       TEXT,
-    added_at    INTEGER,
-    created_at  INTEGER NOT NULL,
-    updated_at  INTEGER NOT NULL
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    library_id    INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    rating_key    TEXT    NOT NULL UNIQUE,
+    title         TEXT    NOT NULL,
+    type          TEXT    NOT NULL,
+    season_number INTEGER,
+    year          INTEGER,
+    thumb         TEXT,
+    added_at      INTEGER,
+    created_at    INTEGER NOT NULL,
+    updated_at    INTEGER NOT NULL
 );
 
 -- +goose Down

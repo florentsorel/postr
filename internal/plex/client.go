@@ -84,13 +84,29 @@ type Section struct {
 
 // Item represents a media item (movie, show, season, collection).
 type Item struct {
-	RatingKey string `json:"ratingKey"`
-	Title     string `json:"title"`
-	Type      string `json:"type"`
-	Year      int    `json:"year"`
-	Thumb     string `json:"thumb"`
-	AddedAt   int64  `json:"addedAt"`
-	Index     int    `json:"index"` // season number
+	RatingKey              string `json:"ratingKey"`
+	Title                  string `json:"title"`
+	Type                   string `json:"type"`
+	Year                   int    `json:"year"`
+	Thumb                  string `json:"thumb"`
+	AddedAt                int64  `json:"addedAt"`
+	Index                  int    `json:"index"`                  // season number
+	OriginallyAvailableAt  string `json:"originallyAvailableAt"` // season air date, e.g. "2014-01-13"
+}
+
+// SeasonYear returns the year from OriginallyAvailableAt if set, otherwise falls back to Year.
+func (i Item) SeasonYear() int {
+	if len(i.OriginallyAvailableAt) >= 4 {
+		y := 0
+		for _, c := range i.OriginallyAvailableAt[:4] {
+			if c < '0' || c > '9' {
+				return i.Year
+			}
+			y = y*10 + int(c-'0')
+		}
+		return y
+	}
+	return i.Year
 }
 
 type sectionsResponse struct {

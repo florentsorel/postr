@@ -5,6 +5,7 @@ interface Props {
   title: string
   type: MediaType
   year?: number
+  seasonNumber?: number
   thumb?: string
 }
 
@@ -88,6 +89,9 @@ const typeLabel: Record<MediaType, string> = {
         >
           {{ typeLabel[type] }}
         </span>
+        <span v-if="type === 'season' && seasonNumber" class="text-xs text-neutral-500"
+          >S{{ seasonNumber }}</span
+        >
         <span v-if="year" class="text-xs text-neutral-500">{{ year }}</span>
       </div>
     </div>
