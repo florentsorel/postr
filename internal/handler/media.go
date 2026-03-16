@@ -30,7 +30,8 @@ func (h *Handler) GetMediaThumb(c *echo.Context) error {
 	}
 
 	path := filepath.Join(h.config.DataPath, "posters", m.Type, ratingKey+".jpg")
-	return c.File(path)
+	http.ServeFile(c.Response(), c.Request(), path)
+	return nil
 }
 
 func (h *Handler) GetMedia(c *echo.Context) error {
