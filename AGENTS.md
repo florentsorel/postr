@@ -119,12 +119,15 @@ Two categories of settings:
 - Toggle which poster sources are enabled (TMDB, TVDB, Fanart.tv) and their order (drag to reorder — first enabled source is used by default)
 - API keys for TMDB, TVDB, Fanart.tv
 - Option to enable/disable automatic image resizing on upload
+- Per-library enable/disable toggle (which Plex libraries are included in imports)
 
 **Read-only (from environment variables, displayed in UI but not editable):**
-- Plex server URL and token — set via `PLEX_URL` / `PLEX_TOKEN`
+- Plex server URL and token — set via `PLEX_URL` / `PLEX_TOKEN` (token shown as set/not set only, never exposed)
 - Auth status, username — set via `AUTH_ENABLED` / `AUTH_USER` / `AUTH_PASS`
 
 The backend exposes `GET /api/settings` which returns both env-based config (read-only) and DB-stored settings. Only DB-stored settings are accepted on `POST /api/settings`.
+
+`PLEX_URL` is normalized at startup: scheme defaults to `http://` if omitted, trailing slashes and paths are stripped. Invalid schemes (non http/https) cause a startup error.
 
 ### 4. Authentication (Optional)
 
@@ -168,25 +171,39 @@ The application is packaged as a single Docker image containing both the Go back
 
 ---
 
-## Project Structure (Planned)
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/settings` | Get all settings (env vars + DB) |
+| `POST` | `/api/settings` | Save editable settings (sources, options) |
+| `GET` | `/api/libraries` | List Plex libraries with enabled state from DB |
+| `POST` | `/api/libraries` | Save per-library enabled/disabled state |
+| `GET` | `/api/media` | List imported media items |
+| `GET` | `/api/plex/status` | Check if Plex is configured (URL + token set) |
+| `GET` | `/api/plex/ping` | Test Plex connectivity and token validity |
+| `POST` | `/api/plex/import` | Import media from Plex (by type and section) |
+
+## Project Structure
 
 ```
 postr/
 ├── cmd/
 │   └── api/
-│       └── main.go   # Application entrypoint
-├── plex/             # Plex API client
-├── db/               # SQLite models & queries
-├── handlers/         # HTTP handlers
-├── library/          # ZIP extraction and poster library management
-├── sources/          # Poster source fetchers (TMDB, TVDB, etc.)
-├── web/              # Vue + Vite app
-│   ├── src/
-│   │   ├── components/
-│   │   ├── pages/         # LibraryPage, SettingsPage, PosterLibraryPage
-│   │   └── hooks/
-│   └── public/
+│       └── main.go        # Application entrypoint
+├── plex/                  # Plex HTTP client
+├── db/
+│   ├── migrations/        # Goose SQL migrations
+│   ├── queries/           # sqlc query definitions
+│   └── *.sql.go           # Generated sqlc code
+├── internal/
+│   ├── config/            # Env var config (caarlos0/env)
+│   └── handler/           # HTTP handlers (Echo v5)
+├── web/                   # Vue 3 + Vite frontend
+│   └── src/
+│       ├── components/
+│       ├── composables/
+│       └── pages/
 ├── Dockerfile
-├── docker-compose.yml
 └── AGENTS.md
 ```

@@ -186,47 +186,6 @@ async function importFromPlex(targets: { type: string; sectionKeys: string[] }[]
     importing.value = false
   }
 }
-
-// DEV ONLY — toggle mock data to preview the grid
-const MOCK_MEDIA: MediaItem[] = [
-  { id: "1", title: "Inception", type: "movie", year: 2010 },
-  { id: "2", title: "The Dark Knight", type: "movie", year: 2008 },
-  { id: "3", title: "Interstellar", type: "movie", year: 2014 },
-  { id: "4", title: "Dune: Part Two", type: "movie", year: 2024 },
-  { id: "5", title: "Oppenheimer", type: "movie", year: 2023 },
-  { id: "6", title: "The Godfather", type: "movie", year: 1972 },
-  { id: "7", title: "Pulp Fiction", type: "movie", year: 1994 },
-  { id: "8", title: "The Matrix", type: "movie", year: 1999 },
-  { id: "9", title: "Blade Runner 2049", type: "movie", year: 2017 },
-  { id: "10", title: "Parasite", type: "movie", year: 2019 },
-  { id: "11", title: "Everything Everywhere", type: "movie", year: 2022 },
-  { id: "12", title: "Poor Things", type: "movie", year: 2023 },
-  { id: "13", title: "The Brutalist", type: "movie", year: 2024 },
-  { id: "14", title: "Breaking Bad", type: "show", year: 2008 },
-  { id: "15", title: "The Last of Us", type: "show", year: 2023 },
-  { id: "16", title: "Severance", type: "show", year: 2022 },
-  { id: "17", title: "The Bear", type: "show", year: 2022 },
-  { id: "18", title: "Andor", type: "show", year: 2022 },
-  { id: "19", title: "Shogun", type: "show", year: 2024 },
-  { id: "20", title: "True Detective", type: "show", year: 2014 },
-  { id: "21", title: "Breaking Bad - Season 1", type: "season", year: 2008 },
-  { id: "22", title: "Breaking Bad - Season 2", type: "season", year: 2009 },
-  { id: "23", title: "Breaking Bad - Season 3", type: "season", year: 2010 },
-  { id: "24", title: "Breaking Bad - Season 4", type: "season", year: 2011 },
-  { id: "25", title: "Breaking Bad - Season 5", type: "season", year: 2012 },
-  { id: "26", title: "The Last of Us - Season 1", type: "season", year: 2023 },
-  { id: "27", title: "The Last of Us - Season 2", type: "season", year: 2025 },
-  { id: "28", title: "Severance - Season 1", type: "season", year: 2022 },
-  { id: "29", title: "Severance - Season 2", type: "season", year: 2025 },
-  { id: "30", title: "Christopher Nolan", type: "collection" },
-  { id: "31", title: "Marvel Cinematic Universe", type: "collection" },
-  { id: "32", title: "Star Wars", type: "collection" },
-  { id: "33", title: "The Godfather Trilogy", type: "collection" },
-]
-
-function toggleMock() {
-  media.value = media.value.length === 0 ? MOCK_MEDIA : []
-}
 </script>
 
 <template>
@@ -241,15 +200,6 @@ function toggleMock() {
       </div>
 
       <div class="ml-auto flex items-center gap-3">
-        <!-- DEV ONLY -->
-        <UButton
-          :icon="media.length === 0 ? 'i-lucide-eye' : 'i-lucide-eye-off'"
-          variant="ghost"
-          color="neutral"
-          size="sm"
-          title="Toggle mock data"
-          @click="toggleMock"
-        />
         <UButton
           :loading="importing"
           icon="i-lucide-refresh-cw"

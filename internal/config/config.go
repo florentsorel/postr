@@ -2,7 +2,8 @@ package config
 
 import (
 	"errors"
-	"strings"
+	"fmt"
+	"net/url"
 
 	"github.com/caarlos0/env/v11"
 )
@@ -28,18 +29,38 @@ func Load() (*Config, error) {
 	if err := env.Parse(cfg); err != nil {
 		return nil, err
 	}
-	cfg.normalize()
+	if err := cfg.normalize(); err != nil {
+		return nil, err
+	}
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
 	return cfg, nil
 }
 
-func (c *Config) normalize() {
-	if c.PlexURL != "" && !strings.HasPrefix(c.PlexURL, "http://") && !strings.HasPrefix(c.PlexURL, "https://") {
-		c.PlexURL = "http://" + c.PlexURL
+func (c *Config) normalize() error {
+	if c.PlexURL == "" {
+		return nil
 	}
-	c.PlexURL = strings.TrimRight(c.PlexURL, "/")
+
+	u, err := url.Parse(c.PlexURL)
+	if err != nil || u.Host == "" {
+		// No scheme — try prepending http://
+		u, err = url.Parse("http://" + c.PlexURL)
+		if err != nil {
+			return fmt.Errorf("invalid PLEX_URL %q: %w", c.PlexURL, err)
+		}
+	}
+
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("invalid PLEX_URL %q: scheme must be http or https", c.PlexURL)
+	}
+
+	u.Path = ""
+	u.RawQuery = ""
+	u.Fragment = ""
+	c.PlexURL = u.String()
+	return nil
 }
 
 func (c *Config) validate() error {
