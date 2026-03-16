@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/florentsorel/postr/plex"
 	"github.com/labstack/echo/v5"
 )
 
@@ -17,31 +16,6 @@ type plexPingResponse struct {
 	Error     string `json:"error,omitempty"`
 }
 
-type plexSectionsResponse struct {
-	Sections []plexSection `json:"sections"`
-}
-
-type plexSection struct {
-	Key   string `json:"key"`
-	Type  string `json:"type"`
-	Title string `json:"title"`
-}
-
-func (h *Handler) GetPlexSections(c *echo.Context) error {
-	if h.config.PlexURL == "" || h.config.PlexToken == "" {
-		return c.JSON(http.StatusOK, plexSectionsResponse{Sections: []plexSection{}})
-	}
-	client := plex.NewClient(h.config.PlexURL, h.config.PlexToken)
-	sections, err := client.Sections(c.Request().Context())
-	if err != nil {
-		return c.JSON(http.StatusBadGateway, map[string]string{"error": err.Error()})
-	}
-	out := make([]plexSection, len(sections))
-	for i, s := range sections {
-		out[i] = plexSection{Key: s.Key, Type: s.Type, Title: s.Title}
-	}
-	return c.JSON(http.StatusOK, plexSectionsResponse{Sections: out})
-}
 
 func (h *Handler) GetPlexStatus(c *echo.Context) error {
 	return c.JSON(http.StatusOK, plexStatusResponse{

@@ -38,7 +38,6 @@ func main() {
 
 	api.GET("/media", h.GetMedia)
 
-	api.GET("/plex/sections", h.GetPlexSections)
 	api.GET("/plex/status", h.GetPlexStatus)
 	api.GET("/plex/ping", h.PingPlex)
 	api.POST("/plex/import", h.ImportFromPlex)
