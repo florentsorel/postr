@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	postrdb "github.com/florentsorel/postr/db"
-	"github.com/florentsorel/postr/plex"
+	"github.com/florentsorel/postr/internal/plex"
 	"github.com/labstack/echo/v5"
 )
 
@@ -24,12 +24,11 @@ type getLibrariesResponse struct {
 }
 
 func (h *Handler) GetLibraries(c *echo.Context) error {
-	if h.config.PlexURL == "" || h.config.PlexToken == "" {
+	if h.plex == nil {
 		return c.JSON(http.StatusOK, getLibrariesResponse{Configured: false})
 	}
 
-	client := plex.NewClient(h.config.PlexURL, h.config.PlexToken)
-	sections, err := client.Sections(c.Request().Context())
+	sections, err := h.plex.Sections(c.Request().Context())
 	if err != nil {
 		msg := "Unable to reach Plex server."
 		if errors.Is(err, plex.ErrUnauthorized) {

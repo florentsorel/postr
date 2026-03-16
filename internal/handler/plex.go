@@ -1,9 +1,10 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
-	"time"
 
+	"github.com/florentsorel/postr/internal/plex"
 	"github.com/labstack/echo/v5"
 )
 
@@ -16,7 +17,6 @@ type plexPingResponse struct {
 	Error     string `json:"error,omitempty"`
 }
 
-
 func (h *Handler) GetPlexStatus(c *echo.Context) error {
 	return c.JSON(http.StatusOK, plexStatusResponse{
 		Configured: h.config.PlexURL != "" && h.config.PlexToken != "",
@@ -24,37 +24,21 @@ func (h *Handler) GetPlexStatus(c *echo.Context) error {
 }
 
 func (h *Handler) PingPlex(c *echo.Context) error {
-	if h.config.PlexURL == "" || h.config.PlexToken == "" {
+	if h.plex == nil {
 		return c.JSON(http.StatusOK, plexPingResponse{
 			Reachable: false,
 			Error:     "Plex is not configured.",
 		})
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequestWithContext(
-		c.Request().Context(),
-		http.MethodGet,
-		h.config.PlexURL+"/library/sections",
-		nil,
-	)
-	if err != nil {
-		return c.JSON(http.StatusOK, plexPingResponse{Reachable: false, Error: err.Error()})
-	}
-	req.Header.Set("X-Plex-Token", h.config.PlexToken)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return c.JSON(http.StatusOK, plexPingResponse{Reachable: false, Error: "Unable to reach Plex server."})
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusUnauthorized {
-		return c.JSON(http.StatusOK, plexPingResponse{Reachable: false, Error: "Invalid Plex token."})
-	}
-	if resp.StatusCode != http.StatusOK {
-		return c.JSON(http.StatusOK, plexPingResponse{Reachable: false, Error: "Plex returned an unexpected response."})
+	_, err := h.plex.Sections(c.Request().Context())
+	if err == nil {
+		return c.JSON(http.StatusOK, plexPingResponse{Reachable: true})
 	}
 
-	return c.JSON(http.StatusOK, plexPingResponse{Reachable: true})
+	msg := "Unable to reach Plex server."
+	if errors.Is(err, plex.ErrUnauthorized) {
+		msg = "Invalid Plex token."
+	}
+	return c.JSON(http.StatusOK, plexPingResponse{Reachable: false, Error: msg})
 }

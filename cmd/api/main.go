@@ -6,6 +6,7 @@ import (
 	"github.com/florentsorel/postr/db"
 	"github.com/florentsorel/postr/internal/config"
 	"github.com/florentsorel/postr/internal/handler"
+	"github.com/florentsorel/postr/internal/plex"
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
 )
@@ -27,7 +28,12 @@ func main() {
 	}
 	defer conn.Close()
 
-	h := handler.New(db.New(conn), cfg)
+	var plexClient *plex.Client
+	if cfg.PlexURL != "" && cfg.PlexToken != "" {
+		plexClient = plex.NewClient(cfg.PlexURL, cfg.PlexToken)
+	}
+
+	h := handler.New(db.New(conn), cfg, plexClient)
 
 	api := e.Group("/api")
 	api.GET("/settings", h.GetSettings)
@@ -37,6 +43,7 @@ func main() {
 	api.POST("/libraries", h.SaveLibraries)
 
 	api.GET("/media", h.GetMedia)
+	api.GET("/media/:ratingKey/thumb", h.GetMediaThumb)
 
 	api.GET("/plex/status", h.GetPlexStatus)
 	api.GET("/plex/ping", h.PingPlex)
