@@ -29,14 +29,28 @@ func (q *Queries) DeleteMediaByRatingKey(ctx context.Context, ratingKey string) 
 }
 
 const getMediaByRatingKey = `-- name: GetMediaByRatingKey :one
-SELECT id, library_id, rating_key, title, type, year, thumb, added_at, created_at, updated_at
+SELECT id, library_id, rating_key, title, type, year, season_number, thumb, added_at, created_at, updated_at
 FROM media
 WHERE rating_key = ?
 `
 
-func (q *Queries) GetMediaByRatingKey(ctx context.Context, ratingKey string) (Medium, error) {
+type GetMediaByRatingKeyRow struct {
+	ID           int64
+	LibraryID    int64
+	RatingKey    string
+	Title        string
+	Type         string
+	Year         sql.NullInt64
+	SeasonNumber sql.NullInt64
+	Thumb        sql.NullString
+	AddedAt      sql.NullInt64
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
+func (q *Queries) GetMediaByRatingKey(ctx context.Context, ratingKey string) (GetMediaByRatingKeyRow, error) {
 	row := q.db.QueryRowContext(ctx, getMediaByRatingKey, ratingKey)
-	var i Medium
+	var i GetMediaByRatingKeyRow
 	err := row.Scan(
 		&i.ID,
 		&i.LibraryID,
@@ -44,6 +58,7 @@ func (q *Queries) GetMediaByRatingKey(ctx context.Context, ratingKey string) (Me
 		&i.Title,
 		&i.Type,
 		&i.Year,
+		&i.SeasonNumber,
 		&i.Thumb,
 		&i.AddedAt,
 		&i.CreatedAt,
@@ -53,21 +68,22 @@ func (q *Queries) GetMediaByRatingKey(ctx context.Context, ratingKey string) (Me
 }
 
 const listMedia = `-- name: ListMedia :many
-SELECT id, library_id, rating_key, title, type, year, thumb, added_at, created_at
+SELECT id, library_id, rating_key, title, type, year, season_number, thumb, added_at, created_at
 FROM media
 ORDER BY added_at DESC NULLS LAST
 `
 
 type ListMediaRow struct {
-	ID        int64
-	LibraryID int64
-	RatingKey string
-	Title     string
-	Type      string
-	Year      sql.NullInt64
-	Thumb     sql.NullString
-	AddedAt   sql.NullInt64
-	CreatedAt int64
+	ID           int64
+	LibraryID    int64
+	RatingKey    string
+	Title        string
+	Type         string
+	Year         sql.NullInt64
+	SeasonNumber sql.NullInt64
+	Thumb        sql.NullString
+	AddedAt      sql.NullInt64
+	CreatedAt    int64
 }
 
 func (q *Queries) ListMedia(ctx context.Context) ([]ListMediaRow, error) {
@@ -86,6 +102,7 @@ func (q *Queries) ListMedia(ctx context.Context) ([]ListMediaRow, error) {
 			&i.Title,
 			&i.Type,
 			&i.Year,
+			&i.SeasonNumber,
 			&i.Thumb,
 			&i.AddedAt,
 			&i.CreatedAt,
@@ -171,27 +188,29 @@ func (q *Queries) UpsertLibrary(ctx context.Context, arg UpsertLibraryParams) (L
 }
 
 const upsertMedia = `-- name: UpsertMedia :exec
-INSERT INTO media (library_id, rating_key, title, type, year, thumb, added_at, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO media (library_id, rating_key, title, type, year, season_number, thumb, added_at, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (rating_key) DO UPDATE SET
-    title      = excluded.title,
-    type       = excluded.type,
-    year       = excluded.year,
-    thumb      = excluded.thumb,
-    added_at   = excluded.added_at,
-    updated_at = excluded.updated_at
+    title         = excluded.title,
+    type          = excluded.type,
+    year          = excluded.year,
+    season_number = excluded.season_number,
+    thumb         = excluded.thumb,
+    added_at      = excluded.added_at,
+    updated_at    = excluded.updated_at
 `
 
 type UpsertMediaParams struct {
-	LibraryID int64
-	RatingKey string
-	Title     string
-	Type      string
-	Year      sql.NullInt64
-	Thumb     sql.NullString
-	AddedAt   sql.NullInt64
-	CreatedAt int64
-	UpdatedAt int64
+	LibraryID    int64
+	RatingKey    string
+	Title        string
+	Type         string
+	Year         sql.NullInt64
+	SeasonNumber sql.NullInt64
+	Thumb        sql.NullString
+	AddedAt      sql.NullInt64
+	CreatedAt    int64
+	UpdatedAt    int64
 }
 
 func (q *Queries) UpsertMedia(ctx context.Context, arg UpsertMediaParams) error {
@@ -201,6 +220,7 @@ func (q *Queries) UpsertMedia(ctx context.Context, arg UpsertMediaParams) error 
 		arg.Title,
 		arg.Type,
 		arg.Year,
+		arg.SeasonNumber,
 		arg.Thumb,
 		arg.AddedAt,
 		arg.CreatedAt,

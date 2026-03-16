@@ -22,16 +22,17 @@ type LibrarySetting struct {
 }
 
 type Medium struct {
-	ID        int64
-	LibraryID int64
-	RatingKey string
-	Title     string
-	Type      string
-	Year      sql.NullInt64
-	Thumb     sql.NullString
-	AddedAt   sql.NullInt64
-	CreatedAt int64
-	UpdatedAt int64
+	ID           int64
+	LibraryID    int64
+	RatingKey    string
+	Title        string
+	Type         string
+	Year         sql.NullInt64
+	Thumb        sql.NullString
+	AddedAt      sql.NullInt64
+	CreatedAt    int64
+	UpdatedAt    int64
+	SeasonNumber sql.NullInt64
 }
 
 type Setting struct {

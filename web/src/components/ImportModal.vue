@@ -169,11 +169,11 @@ function handleEvent(event: Record<string, unknown>) {
     stats.value.skipped = event.skipped as number
     stats.value.deleted = event.deleted as number
     phase.value = "done"
+    emit("imported")
   }
 }
 
 function close() {
-  if (phase.value === "done") emit("imported")
   emit("update:open", false)
 }
 </script>
@@ -181,6 +181,7 @@ function close() {
 <template>
   <UModal
     :open="open"
+    class="select-none"
     title="Import from Plex"
     :description="phase === 'selecting' ? 'Select which media types to import.' : undefined"
     :close="phase !== 'importing'"

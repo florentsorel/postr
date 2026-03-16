@@ -130,7 +130,7 @@ async function save() {
 <template>
   <div v-if="loading" class="min-h-screen bg-[#1f1f1f]" />
   <ErrorLayout v-else-if="error" :code="error.code" :message="error.message" />
-  <div v-else class="min-h-screen bg-[#1f1f1f] text-white">
+  <div v-else class="min-h-screen bg-[#1f1f1f] text-white select-none">
     <!-- Header -->
     <header class="border-b border-neutral-800 px-6 py-4 flex items-center gap-4">
       <UButton to="/" icon="i-lucide-arrow-left" variant="ghost" color="neutral" size="sm" />
@@ -171,7 +171,7 @@ async function save() {
                 class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/60 border border-neutral-700/50"
               >
                 <UIcon name="i-lucide-globe" class="w-4 h-4 text-neutral-500 shrink-0" />
-                <span class="text-sm text-neutral-300 font-mono">
+                <span class="text-sm text-neutral-300 font-mono select-text">
                   {{ env.plexUrl || "" }}
                 </span>
               </div>
@@ -394,7 +394,7 @@ async function save() {
                   class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/60 border border-neutral-700/50"
                 >
                   <UIcon name="i-lucide-user" class="w-4 h-4 text-neutral-500 shrink-0" />
-                  <span class="text-sm text-neutral-300 font-mono">
+                  <span class="text-sm text-neutral-300 font-mono select-text">
                     {{ env.authUser || "" }}
                   </span>
                 </div>
