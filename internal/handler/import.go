@@ -26,8 +26,6 @@ type importRequest struct {
 	Targets []importTarget `json:"targets"`
 }
 
-// Typed SSE event structs — no omitempty on numeric fields so zero values
-// are always present in the JSON the frontend receives.
 type sseStartEvent struct {
 	Type  string `json:"type"`
 	Total int    `json:"total"`

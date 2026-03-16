@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/florentsorel/postr/db"
@@ -9,13 +10,22 @@ import (
 	"github.com/labstack/echo/v5"
 )
 
+// PlexClient is the subset of plex.Client operations used by the handler.
+type PlexClient interface {
+	Sections(ctx context.Context) ([]plex.Section, error)
+	AllItems(ctx context.Context, sectionKey string) ([]plex.Item, error)
+	Children(ctx context.Context, ratingKey string) ([]plex.Item, error)
+	Collections(ctx context.Context, sectionKey string) ([]plex.Item, error)
+	DownloadThumb(ctx context.Context, thumbPath string) ([]byte, error)
+}
+
 type Handler struct {
 	db     *db.Queries
 	config *config.Config
-	plex   *plex.Client
+	plex   PlexClient
 }
 
-func New(queries *db.Queries, cfg *config.Config, plexClient *plex.Client) *Handler {
+func New(queries *db.Queries, cfg *config.Config, plexClient PlexClient) *Handler {
 	return &Handler{db: queries, config: cfg, plex: plexClient}
 }
 
