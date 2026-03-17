@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/florentsorel/postr/db"
+	"github.com/florentsorel/postr/internal/db"
 	"github.com/florentsorel/postr/internal/config"
 	"github.com/florentsorel/postr/internal/plex"
 	"github.com/labstack/echo/v5"

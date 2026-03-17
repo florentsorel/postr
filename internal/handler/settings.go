@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/florentsorel/postr/db"
+	"github.com/florentsorel/postr/internal/db"
 	"github.com/labstack/echo/v5"
 )
 

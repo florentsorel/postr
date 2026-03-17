@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/florentsorel/postr/db"
+	"github.com/florentsorel/postr/internal/db"
 	"github.com/labstack/echo/v5"
 )
 
