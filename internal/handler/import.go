@@ -192,19 +192,20 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 			current++
 			_, isExisting := existingSet[item.RatingKey]
 
-			// For existing items, check the poster first: if unchanged, skip the DB upsert entirely.
-			if isExisting && item.Thumb != "" {
-				err := h.saveThumb(ctx, batch.target.Type, item.RatingKey, item.Thumb)
-				if errors.Is(err, errThumbUnchanged) {
+			var thumbExt string
+			if item.Thumb != "" {
+				var saveErr error
+				thumbExt, saveErr = h.saveThumb(ctx, batch.target.Type, item.RatingKey, item.Thumb)
+				if errors.Is(saveErr, errThumbUnchanged) && isExisting {
 					skipped++
 					processedSet[item.RatingKey] = struct{}{}
 					send(sseSkipEvent{Type: "skip", Title: item.Title, Message: "unchanged"})
 					send(sseProgressEvent{Type: "progress", Current: current, Total: total})
 					continue
 				}
-				if err != nil {
-					log.Warn("failed to save thumb", "ratingKey", item.RatingKey, "error", err)
-					send(sseSkipEvent{Type: "skip", Title: item.Title, Message: "thumbnail download failed: " + err.Error()})
+				if saveErr != nil && !errors.Is(saveErr, errThumbUnchanged) {
+					log.Warn("failed to save thumb", "ratingKey", item.RatingKey, "error", saveErr)
+					send(sseSkipEvent{Type: "skip", Title: item.Title, Message: "thumbnail download failed: " + saveErr.Error()})
 				}
 			}
 
@@ -215,7 +216,7 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 				Type:         batch.target.Type,
 				Year:         sql.NullInt64{Int64: int64(item.Year), Valid: item.Year != 0},
 				SeasonNumber: sql.NullInt64{Int64: int64(item.Index), Valid: batch.target.Type == "season" && item.Index != 0},
-				Thumb:        sql.NullString{String: item.Thumb, Valid: item.Thumb != ""},
+				Thumb:        sql.NullString{String: thumbExt, Valid: thumbExt != ""},
 				AddedAt:      sql.NullInt64{Int64: item.AddedAt, Valid: item.AddedAt != 0},
 				CreatedAt:    now,
 				UpdatedAt:    now,
@@ -225,14 +226,13 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 			} else {
 				if !isExisting {
 					added++
-					if item.Thumb != "" {
-						if err := h.saveThumb(ctx, batch.target.Type, item.RatingKey, item.Thumb); err != nil && !errors.Is(err, errThumbUnchanged) {
-							log.Warn("failed to save thumb", "ratingKey", item.RatingKey, "error", err)
-							send(sseSkipEvent{Type: "skip", Title: item.Title, Message: "thumbnail download failed: " + err.Error()})
-						}
-					}
 				}
 				processedSet[item.RatingKey] = struct{}{}
+				// The poster was just re-downloaded from Plex, so any pending
+				// local push is now stale — remove it from the queue.
+				if err := h.db.DeletePosterQueueByRatingKey(ctx, item.RatingKey); err != nil {
+					log.Warn("failed to remove stale queue entry", "ratingKey", item.RatingKey, "error", err)
+				}
 			}
 
 			send(sseProgressEvent{Type: "progress", Current: current, Total: total})
@@ -258,22 +258,23 @@ var errThumbUnchanged = errors.New("unchanged")
 
 // saveThumb downloads a poster from Plex and writes it to disk, skipping the
 // write if the file already exists with identical content.
-func (h *Handler) saveThumb(ctx context.Context, mediaType, ratingKey, thumbPath string) error {
-	data, err := h.plex.DownloadThumb(ctx, thumbPath)
+// It returns the file extension (e.g. "jpg", "png", "webp") and any error.
+func (h *Handler) saveThumb(ctx context.Context, mediaType, ratingKey, thumbPath string) (string, error) {
+	data, ext, err := h.plex.DownloadThumb(ctx, thumbPath)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	dir := filepath.Join(h.config.DataPath, "posters", mediaType)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
+		return "", err
 	}
 
-	dest := filepath.Join(dir, ratingKey+".jpg")
+	dest := filepath.Join(dir, ratingKey+"."+ext)
 
 	if existing, err := os.ReadFile(dest); err == nil && bytes.Equal(existing, data) {
-		return errThumbUnchanged
+		return ext, errThumbUnchanged
 	}
 
-	return os.WriteFile(dest, data, 0o644)
+	return ext, os.WriteFile(dest, data, 0o644)
 }

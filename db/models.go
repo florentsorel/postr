@@ -27,12 +27,18 @@ type Medium struct {
 	RatingKey    string
 	Title        string
 	Type         string
+	SeasonNumber sql.NullInt64
 	Year         sql.NullInt64
 	Thumb        sql.NullString
 	AddedAt      sql.NullInt64
 	CreatedAt    int64
 	UpdatedAt    int64
-	SeasonNumber sql.NullInt64
+}
+
+type PosterQueue struct {
+	ID        int64
+	MediaID   int64
+	CreatedAt int64
 }
 
 type Setting struct {

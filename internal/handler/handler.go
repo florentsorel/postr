@@ -16,7 +16,8 @@ type PlexClient interface {
 	AllItems(ctx context.Context, sectionKey string) ([]plex.Item, error)
 	Children(ctx context.Context, ratingKey string) ([]plex.Item, error)
 	Collections(ctx context.Context, sectionKey string) ([]plex.Item, error)
-	DownloadThumb(ctx context.Context, thumbPath string) ([]byte, error)
+	DownloadThumb(ctx context.Context, thumbPath string) ([]byte, string, error)
+	UploadPoster(ctx context.Context, ratingKey string, data []byte, contentType string) error
 }
 
 type Handler struct {

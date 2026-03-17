@@ -47,7 +47,8 @@ const env = ref({
 })
 
 const sources = ref<Source[]>([])
-const options = ref({ autoResize: true })
+const options = ref({ autoResize: true, resizeWidth: 1000 })
+const validationErrors = ref<Record<string, string>>({})
 
 type LibraryStatus = "loading" | "ok" | "not_configured" | "error"
 
@@ -76,6 +77,7 @@ onMounted(async () => {
     env.value.authUser = data.auth_user ?? ""
     env.value.authPassSet = data.auth_pass_set ?? false
     options.value.autoResize = data.auto_resize ?? true
+    options.value.resizeWidth = data.resize_width ?? 1000
     if (Array.isArray(data.sources)) {
       sources.value = [...data.sources].sort((a: Source, b: Source) => a.position - b.position)
     }
@@ -100,27 +102,45 @@ onMounted(async () => {
 })
 
 async function save() {
+  validationErrors.value = {}
+  if (options.value.autoResize && options.value.resizeWidth < 500) {
+    validationErrors.value.resizeWidth = "Target width must be at least 500px"
+    return
+  }
   saving.value = true
   try {
-    await Promise.all([
+    const requests: Promise<Response>[] = [
       fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sources: sources.value, options: options.value }),
       }),
-      libraryStatus.value === "ok"
-        ? fetch("/api/libraries", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              libraries: libraries.value.map((l) => ({ key: l.key, enabled: l.enabled })),
-            }),
-          })
-        : Promise.resolve(),
-    ])
+    ]
+    if (libraryStatus.value === "ok") {
+      requests.push(
+        fetch("/api/libraries", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            libraries: libraries.value.map((l) => ({ key: l.key, enabled: l.enabled })),
+          }),
+        })
+      )
+    }
+    const responses = await Promise.all(requests)
+    const failed = responses.find((r) => !r.ok)
+    if (failed) {
+      const data = await failed.json().catch(() => ({}))
+      throw new Error(data.error ?? `Server error ${failed.status}`)
+    }
     toast.add({ title: "Settings saved", color: "primary", icon: "i-lucide-check-circle" })
-  } catch {
-    toast.add({ title: "Failed to save settings", color: "error", icon: "i-lucide-circle-x" })
+  } catch (e) {
+    toast.add({
+      title: "Failed to save settings",
+      description: e instanceof Error ? e.message : undefined,
+      color: "error",
+      icon: "i-lucide-circle-x",
+    })
   } finally {
     saving.value = false
   }
@@ -347,14 +367,38 @@ async function save() {
           <p class="text-sm text-neutral-500 mt-0.5">General application settings</p>
         </div>
         <UCard variant="soft" class="bg-[#282828] border-neutral-700/50">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-sm font-medium text-white">Auto-resize images</p>
-              <p class="text-xs text-neutral-500">
-                Automatically resize uploaded posters to Plex-compatible dimensions
-              </p>
+          <div class="flex flex-col gap-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-white">Auto-resize images</p>
+                <p class="text-xs text-neutral-500">
+                  Automatically resize uploaded posters to Plex-compatible dimensions
+                </p>
+              </div>
+              <USwitch v-model="options.autoResize" />
             </div>
-            <USwitch v-model="options.autoResize" />
+            <div
+              v-if="options.autoResize"
+              class="flex items-center justify-between pt-3 border-t border-neutral-700/50"
+            >
+              <div>
+                <p class="text-sm font-medium text-white">Target width</p>
+                <p class="text-xs text-neutral-500">
+                  Images wider than this will be downscaled (height auto-calculated at 2:3 ratio)
+                </p>
+                <p v-if="validationErrors.resizeWidth" class="text-xs text-red-400 mt-1">
+                  {{ validationErrors.resizeWidth }}
+                </p>
+              </div>
+              <UInput
+                v-model="options.resizeWidth"
+                type="number"
+                :min="500"
+                class="w-24"
+                size="sm"
+                :color="validationErrors.resizeWidth ? 'error' : undefined"
+              />
+            </div>
           </div>
         </UCard>
       </section>

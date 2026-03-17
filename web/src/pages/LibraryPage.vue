@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
+import { useToast } from "@nuxt/ui/composables/useToast"
 import MediaCard from "../components/MediaCard.vue"
 import ChangePosterModal from "../components/ChangePosterModal.vue"
 import ImportModal from "../components/ImportModal.vue"
+import QueuePanel from "../components/QueuePanel.vue"
 import { useLibraryUiStore } from "@/stores/useLibraryUiStore"
+import { useQueueStore } from "@/stores/useQueueStore"
 
 type MediaType = "all" | "movie" | "show" | "season" | "collection"
 type SortKey = "title" | "year" | "added"
 
 interface MediaItem {
-  id: string
+  id: number
+  ratingKey: string
   title: string
   type: Exclude<MediaType, "all">
   year?: number
@@ -22,6 +26,7 @@ interface MediaItem {
 const route = useRoute()
 const router = useRouter()
 const uiStore = useLibraryUiStore()
+const queueStore = useQueueStore()
 
 const VALID_TABS: MediaType[] = ["all", "movie", "show", "season", "collection"]
 const VALID_SORTS: SortKey[] = ["title", "year", "added"]
@@ -83,6 +88,7 @@ const page = computed<number>({
 
 const loading = ref(false)
 const importModalOpen = ref(false)
+const queuePanelOpen = ref(false)
 const plexConfigured = ref<boolean | null>(null)
 
 onMounted(async () => {
@@ -101,7 +107,31 @@ onMounted(async () => {
     media.value = await mediaRes.value.json()
   }
   loading.value = false
+  queueStore.loadQueue()
 })
+const toast = useToast()
+
+async function sendToPlex(item: MediaItem) {
+  try {
+    await queueStore.pushOne(item.ratingKey)
+  } catch (e) {
+    toast.add({
+      title: "Failed to push to Plex",
+      description: e instanceof Error ? e.message : undefined,
+      color: "error",
+      icon: "i-lucide-circle-x",
+    })
+  }
+}
+
+async function getFromPlex(item: MediaItem) {
+  const thumb = await queueStore.removeItem(item.ratingKey)
+  if (thumb) {
+    const found = media.value.find((m) => m.ratingKey === item.ratingKey)
+    if (found) found.thumb = thumb
+  }
+}
+
 const posterModal = ref(false)
 const selectedItem = ref<MediaItem | null>(null)
 
@@ -110,8 +140,21 @@ function openPosterModal(item: MediaItem) {
   posterModal.value = true
 }
 
-function onPosterConfirm() {
-  // TODO: call API once backend is ready
+function onUploaded(payload: { ratingKey: string; thumb: string }) {
+  const cacheBusted = payload.thumb + "?t=" + Date.now()
+  const item = media.value.find((m) => m.ratingKey === payload.ratingKey)
+  if (item) {
+    item.thumb = cacheBusted
+  }
+  if (selectedItem.value && selectedItem.value.ratingKey === payload.ratingKey) {
+    queueStore.addItem({
+      ratingKey: payload.ratingKey,
+      title: selectedItem.value.title,
+      type: selectedItem.value.type,
+      seasonNumber: selectedItem.value.seasonNumber,
+      thumb: cacheBusted,
+    })
+  }
 }
 
 // Will be replaced by real API data
@@ -198,6 +241,7 @@ const activeTabLabel = computed(
 async function onImported() {
   const res = await fetch("/api/media")
   if (res.ok) media.value = await res.json()
+  queueStore.loadQueue()
 }
 </script>
 
@@ -221,6 +265,17 @@ async function onImported() {
           @click="importModalOpen = true"
         >
           Import from Plex
+        </UButton>
+        <UButton
+          icon="i-lucide-upload-cloud"
+          variant="ghost"
+          color="neutral"
+          size="sm"
+          @click="queuePanelOpen = true"
+        >
+          <template v-if="queueStore.count > 0">
+            <UBadge :label="String(queueStore.count)" color="primary" size="xs" class="ml-1" />
+          </template>
         </UButton>
         <UButton
           to="/settings"
@@ -330,9 +385,12 @@ async function onImported() {
             :year="item.year"
             :season-number="item.seasonNumber"
             :thumb="item.thumb"
+            :syncing="queueStore.isPushing(item.ratingKey)"
+            :pulling="queueStore.isPulling(item.ratingKey)"
+            :in-queue="queueStore.items.some((q) => q.ratingKey === item.ratingKey)"
             @change-poster="openPosterModal(item)"
-            @send-to-plex="() => {}"
-            @get-from-plex="() => {}"
+            @send-to-plex="sendToPlex(item)"
+            @get-from-plex="getFromPlex(item)"
           />
         </div>
 
@@ -349,7 +407,16 @@ async function onImported() {
       </template>
     </div>
 
-    <ChangePosterModal v-model:open="posterModal" :item="selectedItem" @confirm="onPosterConfirm" />
+    <ChangePosterModal v-model:open="posterModal" :item="selectedItem" @uploaded="onUploaded" />
     <ImportModal v-model:open="importModalOpen" @imported="onImported" />
+    <QueuePanel
+      v-model:open="queuePanelOpen"
+      @restored="
+        ({ ratingKey, thumb }) => {
+          const m = media.find((i) => i.ratingKey === ratingKey)
+          if (m) m.thumb = thumb
+        }
+      "
+    />
   </div>
 </template>

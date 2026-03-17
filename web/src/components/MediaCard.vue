@@ -7,6 +7,9 @@ interface Props {
   year?: number
   seasonNumber?: number
   thumb?: string
+  syncing?: boolean
+  pulling?: boolean
+  inQueue?: boolean
 }
 
 defineProps<Props>()
@@ -43,8 +46,18 @@ const typeLabel: Record<MediaType, string> = {
         <UIcon name="i-lucide-image-off" class="w-8 h-8 text-neutral-600" />
       </div>
 
+      <!-- Syncing overlay (push or pull) -->
+      <div
+        v-if="syncing || pulling"
+        class="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2"
+      >
+        <UIcon name="i-lucide-loader-circle" class="w-7 h-7 text-white animate-spin" />
+        <span class="text-xs text-white/80">{{ syncing ? "Pushing…" : "Getting…" }}</span>
+      </div>
+
       <!-- Hover overlay -->
       <div
+        v-else
         class="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center gap-2 p-3"
       >
         <UButton
@@ -81,7 +94,12 @@ const typeLabel: Record<MediaType, string> = {
 
     <!-- Info -->
     <div class="px-0.5">
-      <p class="text-sm font-medium text-white truncate leading-tight">{{ title }}</p>
+      <div class="flex items-center gap-1.5">
+        <p class="text-sm font-medium text-white truncate leading-tight flex-1">{{ title }}</p>
+        <UTooltip v-if="inQueue" text="Pending push to Plex">
+          <UIcon name="i-lucide-upload" class="w-3.5 h-3.5 text-primary-400 shrink-0" />
+        </UTooltip>
+      </div>
       <div class="flex items-center gap-1.5 mt-1">
         <span
           :class="`badge-${type}`"

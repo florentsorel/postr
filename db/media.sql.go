@@ -68,7 +68,7 @@ func (q *Queries) GetMediaByRatingKey(ctx context.Context, ratingKey string) (Ge
 }
 
 const listMedia = `-- name: ListMedia :many
-SELECT id, library_id, rating_key, title, type, year, season_number, thumb, added_at, created_at
+SELECT id, library_id, rating_key, title, type, year, season_number, thumb, added_at, created_at, updated_at
 FROM media
 ORDER BY added_at DESC NULLS LAST
 `
@@ -84,6 +84,7 @@ type ListMediaRow struct {
 	Thumb        sql.NullString
 	AddedAt      sql.NullInt64
 	CreatedAt    int64
+	UpdatedAt    int64
 }
 
 func (q *Queries) ListMedia(ctx context.Context) ([]ListMediaRow, error) {
@@ -106,6 +107,7 @@ func (q *Queries) ListMedia(ctx context.Context) ([]ListMediaRow, error) {
 			&i.Thumb,
 			&i.AddedAt,
 			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -150,6 +152,21 @@ func (q *Queries) ListRatingKeysByLibraryIDAndType(ctx context.Context, arg List
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateMediaThumb = `-- name: UpdateMediaThumb :exec
+UPDATE media SET thumb = ?, updated_at = ? WHERE rating_key = ?
+`
+
+type UpdateMediaThumbParams struct {
+	Thumb     sql.NullString
+	UpdatedAt int64
+	RatingKey string
+}
+
+func (q *Queries) UpdateMediaThumb(ctx context.Context, arg UpdateMediaThumbParams) error {
+	_, err := q.db.ExecContext(ctx, updateMediaThumb, arg.Thumb, arg.UpdatedAt, arg.RatingKey)
+	return err
 }
 
 const upsertLibrary = `-- name: UpsertLibrary :one

@@ -44,6 +44,12 @@ func main() {
 
 	api.GET("/media", h.GetMedia)
 	api.GET("/media/:ratingKey/thumb", h.GetMediaThumb)
+	api.POST("/media/:ratingKey/upload", h.UploadMediaPoster)
+	api.POST("/media/:ratingKey/push", h.PushPoster)
+
+	api.GET("/queue", h.GetQueue)
+	api.DELETE("/queue/:ratingKey", h.RemoveFromQueue)
+	api.POST("/queue/push-all", h.PushAllPosters)
 
 	api.GET("/plex/status", h.GetPlexStatus)
 	api.GET("/plex/ping", h.PingPlex)
