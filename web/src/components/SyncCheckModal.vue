@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue"
+import { ref, computed } from "vue"
 import { readSSEStream } from "@/composables/useSSEStream"
 import MediaItemRow from "./MediaItemRow.vue"
 
-type Phase = "checking" | "done"
+type Phase = "confirm" | "checking" | "done"
 
 interface ChangedItem {
   ratingKey: string
@@ -19,7 +19,7 @@ const emit = defineEmits<{
   synced: [items: ChangedItem[]]
 }>()
 
-const phase = ref<Phase>("checking")
+const phase = ref<Phase>("confirm")
 const progress = ref({ current: 0, total: 0 })
 const changedItems = ref<ChangedItem[]>([])
 
@@ -27,11 +27,8 @@ const progressPercent = computed(() =>
   progress.value.total > 0 ? Math.round((progress.value.current / progress.value.total) * 100) : 0
 )
 
-onMounted(() => {
-  startSync()
-})
-
-async function startSync() {
+async function confirm() {
+  phase.value = "checking"
   await readSSEStream("/api/plex/sync", { method: "POST" }, handleEvent)
   if (phase.value === "checking") phase.value = "done"
 }
@@ -69,11 +66,13 @@ function close() {
     class="select-none"
     title="Sync from Plex"
     :description="
-      phase === 'checking'
-        ? 'Comparing local posters with Plex…'
-        : changedItems.length === 0
-          ? `All posters are up to date (${progress.total} checked)`
-          : `${changedItems.length} poster${changedItems.length !== 1 ? 's' : ''} updated from Plex`
+      phase === 'confirm'
+        ? undefined
+        : phase === 'checking'
+          ? 'Comparing local posters with Plex…'
+          : changedItems.length === 0
+            ? `All posters are up to date (${progress.total} checked)`
+            : `${changedItems.length} poster${changedItems.length !== 1 ? 's' : ''} updated from Plex`
     "
     :close="phase !== 'checking'"
     :dismissible="phase !== 'checking'"
@@ -84,8 +83,17 @@ function close() {
     "
   >
     <template #body>
+      <!-- Confirm phase -->
+      <div v-if="phase === 'confirm'" class="flex flex-col gap-3 py-2">
+        <p class="text-sm text-neutral-300">
+          This will compare all local posters with Plex and update any that have changed directly in
+          Plex. Only items not modified locally will be checked.
+        </p>
+        <p class="text-sm text-neutral-400">Do you want to proceed?</p>
+      </div>
+
       <!-- Checking phase -->
-      <div v-if="phase === 'checking'" class="flex flex-col gap-5 py-2">
+      <div v-else-if="phase === 'checking'" class="flex flex-col gap-5 py-2">
         <div class="flex items-center gap-3">
           <UIcon
             name="i-lucide-loader-circle"
@@ -101,7 +109,7 @@ function close() {
       </div>
 
       <!-- Done phase -->
-      <div v-else>
+      <div v-else-if="phase === 'done'">
         <!-- No changes -->
         <div
           v-if="changedItems.length === 0"
@@ -128,7 +136,20 @@ function close() {
     </template>
 
     <template #footer>
-      <div class="flex justify-end w-full">
+      <div class="flex justify-end gap-2 w-full">
+        <UButton
+          v-if="phase === 'confirm'"
+          label="Cancel"
+          color="neutral"
+          variant="ghost"
+          @click="close"
+        />
+        <UButton
+          v-if="phase === 'confirm'"
+          label="Sync"
+          icon="i-lucide-scan-search"
+          @click="confirm"
+        />
         <UButton v-if="phase === 'done'" label="Close" @click="close" />
       </div>
     </template>

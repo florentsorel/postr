@@ -55,7 +55,7 @@ describe("MediaCard", () => {
       global: { stubs },
     })
 
-    await userEvent.click(screen.getByText("Change poster"))
+    await userEvent.click(screen.getAllByText("Change poster")[0])
     expect(emitted("changePoster")).toHaveLength(1)
   })
 
@@ -74,7 +74,7 @@ describe("MediaCard", () => {
       global: { stubs },
     })
 
-    await userEvent.click(screen.getByText("Send to Plex"))
+    await userEvent.click(screen.getAllByText("Send to Plex")[0])
     expect(emitted("sendToPlex")).toHaveLength(1)
   })
 
@@ -93,7 +93,7 @@ describe("MediaCard", () => {
       global: { stubs },
     })
 
-    await userEvent.click(screen.getByText("Get from Plex"))
+    await userEvent.click(screen.getAllByText("Get from Plex")[0])
     expect(emitted("getFromPlex")).toHaveLength(1)
   })
 

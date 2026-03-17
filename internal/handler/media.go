@@ -222,6 +222,7 @@ func (h *Handler) GetMedia(c *echo.Context) error {
 		if m.AddedAt.Valid {
 			item.AddedAt = &m.AddedAt.Int64
 		}
+		item.LocallyModified = m.LocallyModified != 0
 		items = append(items, item)
 	}
 

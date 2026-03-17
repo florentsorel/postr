@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue"
-import { VueDraggable } from "vue-draggable-plus"
 import { useApiError } from "@/composables/useApiError"
 
 type PingStatus = "idle" | "loading" | "ok" | "error"
@@ -29,14 +28,6 @@ const saving = ref(false)
 const { error, handleResponse, handleException } = useApiError()
 const loading = ref(true)
 
-interface Source {
-  id: string
-  label: string
-  description: string
-  enabled: boolean
-  position: number
-}
-
 // Read-only from env vars — fetched from backend
 const env = ref({
   plexUrl: "",
@@ -46,7 +37,6 @@ const env = ref({
   authPassSet: false,
 })
 
-const sources = ref<Source[]>([])
 const options = ref({ autoResize: true, resizeWidth: 1000 })
 const validationErrors = ref<Record<string, string>>({})
 
@@ -78,9 +68,6 @@ onMounted(async () => {
     env.value.authPassSet = data.auth_pass_set ?? false
     options.value.autoResize = data.auto_resize ?? true
     options.value.resizeWidth = data.resize_width ?? 1000
-    if (Array.isArray(data.sources)) {
-      sources.value = [...data.sources].sort((a: Source, b: Source) => a.position - b.position)
-    }
 
     if (librariesRes.ok) {
       const libData = await librariesRes.json()
@@ -113,7 +100,7 @@ async function save() {
       fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sources: sources.value, options: options.value }),
+        body: JSON.stringify({ options: options.value }),
       }),
     ]
     if (libraryStatus.value === "ok") {
@@ -309,50 +296,9 @@ async function save() {
                 <p class="text-sm font-medium text-white">{{ lib.title }}</p>
                 <p class="text-xs text-neutral-500 capitalize">{{ lib.type }}</p>
               </div>
-              <USwitch v-model="lib.enabled" />
+              <USwitch v-model="lib.enabled" class="ml-2 shrink-0" />
             </div>
           </div>
-        </UCard>
-      </section>
-
-      <!-- Poster Sources -->
-
-      <section>
-        <div class="mb-4">
-          <h2 class="text-base font-semibold text-white flex items-center gap-2">
-            <UIcon name="i-lucide-images" class="w-4 h-4 text-primary-500" />
-            Poster Sources
-          </h2>
-          <p class="text-sm text-neutral-500 mt-0.5">
-            Select and reorder sources — the first enabled one is used by default when fetching
-            posters
-          </p>
-        </div>
-        <UCard variant="soft" class="bg-[#282828] border-neutral-700/50">
-          <VueDraggable
-            v-model="sources"
-            handle=".drag-handle"
-            :animation="150"
-            ghost-class="drag-ghost"
-            chosen-class="drag-chosen"
-            class="flex flex-col divide-y divide-neutral-700/50 -mx-4 sm:-mx-6 -my-4 sm:-my-6 overflow-hidden"
-          >
-            <div
-              v-for="source in sources"
-              :key="source.id"
-              class="flex items-center gap-3 px-4 sm:px-6 py-3"
-            >
-              <UIcon
-                name="i-lucide-grip-vertical"
-                class="drag-handle w-4 h-4 text-neutral-600 cursor-grab active:cursor-grabbing shrink-0"
-              />
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium text-white">{{ source.label }}</p>
-                <p class="text-xs text-neutral-500">{{ source.description }}</p>
-              </div>
-              <USwitch v-model="source.enabled" />
-            </div>
-          </VueDraggable>
         </UCard>
       </section>
 
@@ -375,7 +321,7 @@ async function save() {
                   Automatically resize uploaded posters to Plex-compatible dimensions
                 </p>
               </div>
-              <USwitch v-model="options.autoResize" />
+              <USwitch v-model="options.autoResize" class="ml-2 shrink-0" />
             </div>
             <div
               v-if="options.autoResize"
@@ -394,7 +340,7 @@ async function save() {
                 v-model="options.resizeWidth"
                 type="number"
                 :min="500"
-                class="w-24"
+                class="w-26 ml-2 shrink-0"
                 size="sm"
                 :color="validationErrors.resizeWidth ? 'error' : undefined"
               />
@@ -476,21 +422,3 @@ async function save() {
     </div>
   </div>
 </template>
-
-<style scoped>
-/* Placeholder left behind while dragging */
-:deep(.drag-ghost) {
-  opacity: 0.3;
-  background: transparent;
-}
-
-/* The element currently being dragged */
-:deep(.drag-chosen) {
-  background: color-mix(in srgb, var(--color-plex-500) 8%, #282828);
-  border-radius: 0;
-  border: 1px solid color-mix(in srgb, var(--color-plex-500) 30%, transparent);
-  padding-top: 0.75rem;
-  padding-bottom: 0.75rem;
-  opacity: 1;
-}
-</style>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue"
+import type { DropdownMenuItem } from "@nuxt/ui"
 import { useRoute, useRouter } from "vue-router"
 import { useToast } from "@nuxt/ui/composables/useToast"
 import MediaCard from "../components/MediaCard.vue"
@@ -96,6 +97,49 @@ const importModalOpen = ref(false)
 const queuePanelOpen = ref(false)
 const syncModalOpen = ref(false)
 const helpModalOpen = ref(false)
+
+const menuItems = computed<DropdownMenuItem[][]>(() => {
+  const items: DropdownMenuItem[] = [
+    {
+      label: "Import from Plex",
+      icon: "i-lucide-refresh-cw",
+      onSelect: () => {
+        importModalOpen.value = true
+      },
+    },
+  ]
+  if (plexConfigured.value && mediaItems.value.length > 0) {
+    items.push({
+      label: "Sync from Plex",
+      icon: "i-lucide-scan-search",
+      onSelect: () => {
+        syncModalOpen.value = true
+      },
+    })
+  }
+  if (queueStore.count > 0) {
+    items.push({
+      label: `Queue (${queueStore.count})`,
+      icon: "i-lucide-upload-cloud",
+      onSelect: () => {
+        queuePanelOpen.value = true
+      },
+    })
+  }
+  return [
+    items,
+    [
+      { label: "Settings", icon: "i-lucide-settings", to: "/settings" },
+      {
+        label: "Help",
+        icon: "i-lucide-circle-help",
+        onSelect: () => {
+          helpModalOpen.value = true
+        },
+      },
+    ],
+  ]
+})
 
 defineShortcuts({
   "?": () => {
@@ -296,7 +340,12 @@ function onSynced(items: Array<{ ratingKey: string; updatedAt: number }>) {
         <span class="font-bold text-white text-lg">Postr</span>
       </div>
 
-      <div class="ml-auto flex items-center gap-3">
+      <!-- Hamburger menu (xs only) -->
+      <UDropdownMenu class="sm:hidden ml-auto" :items="menuItems" :content="{ align: 'end' }">
+        <UButton icon="i-lucide-menu" variant="ghost" color="neutral" size="sm" />
+      </UDropdownMenu>
+
+      <div class="ml-auto hidden sm:flex items-center gap-3">
         <UTooltip text="Import library from Plex and download posters">
           <UButton
             icon="i-lucide-refresh-cw"
@@ -412,8 +461,18 @@ function onSynced(items: Array<{ ratingKey: string; updatedAt: number }>) {
         </div>
 
         <!-- Tabs + count -->
-        <div class="flex items-center justify-between mb-6">
-          <UTabs v-model="activeTab" :items="tabs" variant="link" />
+        <div class="flex items-center justify-between mb-6 gap-2">
+          <!-- xs: dropdown select -->
+          <USelect
+            v-model="activeTab"
+            :items="tabs"
+            value-key="value"
+            label-key="label"
+            class="sm:hidden flex-1 min-w-0"
+            size="lg"
+          />
+          <!-- sm+: tabs -->
+          <UTabs v-model="activeTab" :items="tabs" variant="link" class="hidden sm:flex" />
           <span class="text-sm text-neutral-500 shrink-0">
             {{ filtered.length }} item{{ filtered.length !== 1 ? "s" : "" }}
           </span>
@@ -422,7 +481,7 @@ function onSynced(items: Array<{ ratingKey: string; updatedAt: number }>) {
         <!-- Skeleton loading -->
         <div
           v-if="loading"
-          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4"
+          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 items-start"
         >
           <div v-for="n in 12" :key="n" class="flex flex-col gap-2">
             <USkeleton class="w-full aspect-[2/3] rounded-xl" />
@@ -443,7 +502,7 @@ function onSynced(items: Array<{ ratingKey: string; updatedAt: number }>) {
         <!-- Grid -->
         <div
           v-else
-          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4"
+          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 items-start"
         >
           <MediaCard
             v-for="item in paginated"
@@ -469,8 +528,17 @@ function onSynced(items: Array<{ ratingKey: string; updatedAt: number }>) {
             v-model:page="currentPage"
             :total="filtered.length"
             :items-per-page="PER_PAGE"
-            :sibling-count="1"
+            :sibling-count="2"
+            :ui="{ first: 'hidden', last: 'hidden' }"
             show-edges
+            class="hidden sm:flex"
+          />
+          <UPagination
+            v-model:page="currentPage"
+            :total="filtered.length"
+            :items-per-page="PER_PAGE"
+            :sibling-count="1"
+            class="sm:hidden"
           />
         </div>
       </template>
