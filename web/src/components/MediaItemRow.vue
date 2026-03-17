@@ -19,7 +19,7 @@ function typeLabel(type: string, seasonNumber?: number | null): string {
 </script>
 
 <template>
-  <div class="flex items-center gap-3 py-3">
+  <div class="flex items-center gap-3 py-3 pr-3">
     <div class="w-10 h-14 rounded-md overflow-hidden bg-neutral-800 shrink-0">
       <img :src="thumb" :alt="title" class="w-full h-full object-cover" />
     </div>

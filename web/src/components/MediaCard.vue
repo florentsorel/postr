@@ -30,7 +30,7 @@ const typeLabel: Record<MediaType, string> = {
 </script>
 
 <template>
-  <div class="group flex flex-col gap-2">
+  <div class="group flex flex-col gap-2 mb-4 sm:mb-0">
     <!-- Poster -->
     <div class="relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800">
       <img
@@ -56,10 +56,10 @@ const typeLabel: Record<MediaType, string> = {
         <span class="text-xs text-white/80">{{ syncing ? "Pushing…" : "Getting…" }}</span>
       </div>
 
-      <!-- Hover overlay -->
+      <!-- Hover overlay (sm+) -->
       <div
         v-else
-        class="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center gap-2 p-3"
+        class="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity duration-200 hidden sm:flex flex-col items-center justify-center gap-2 p-3"
       >
         <UButton
           icon="i-lucide-image"
@@ -115,6 +115,41 @@ const typeLabel: Record<MediaType, string> = {
         >
         <span v-if="year" class="text-xs text-neutral-500">{{ year }}</span>
       </div>
+    </div>
+
+    <!-- Actions (xs only) -->
+    <div v-if="!syncing && !pulling" class="flex flex-col gap-1.5 sm:hidden">
+      <UButton
+        icon="i-lucide-image"
+        size="xs"
+        variant="solid"
+        block
+        @click.stop="$emit('changePoster')"
+      >
+        Change poster
+      </UButton>
+      <UButton
+        v-if="inQueue"
+        icon="i-lucide-upload"
+        size="xs"
+        variant="outline"
+        color="neutral"
+        block
+        @click.stop="$emit('sendToPlex')"
+      >
+        Send to Plex
+      </UButton>
+      <UButton
+        v-if="locallyModified"
+        icon="i-lucide-download"
+        size="xs"
+        variant="outline"
+        color="neutral"
+        block
+        @click.stop="$emit('getFromPlex')"
+      >
+        Get from Plex
+      </UButton>
     </div>
   </div>
 </template>

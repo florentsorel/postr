@@ -55,7 +55,7 @@ async function pushOne(ratingKey: string) {
         <UIcon name="i-lucide-check-circle" class="w-10 h-10 text-green-500" />
         <p class="text-neutral-400 text-sm">Nothing pending — all posters are in sync.</p>
       </div>
-      <div v-else class="flex flex-col divide-y divide-neutral-800 max-h-96 overflow-y-auto pr-2">
+      <div v-else class="flex flex-col divide-y divide-neutral-800 max-h-96 overflow-y-auto">
         <MediaItemRow
           v-for="item in queue.items"
           :key="item.ratingKey"
@@ -65,15 +65,17 @@ async function pushOne(ratingKey: string) {
           :season-number="item.seasonNumber"
         >
           <div class="flex items-center gap-2 shrink-0">
-            <UButton
-              icon="i-lucide-upload"
-              size="xs"
-              variant="outline"
-              color="neutral"
-              :loading="pushingItem === item.ratingKey"
-              :disabled="pushingAll"
-              @click="pushOne(item.ratingKey)"
-            />
+            <UTooltip text="Send to Plex">
+              <UButton
+                icon="i-lucide-upload"
+                size="xs"
+                variant="outline"
+                color="neutral"
+                :loading="pushingItem === item.ratingKey"
+                :disabled="pushingAll"
+                @click="pushOne(item.ratingKey)"
+              />
+            </UTooltip>
             <UTooltip text="Remove from queue and restore poster from Plex">
               <UButton
                 icon="i-lucide-x"

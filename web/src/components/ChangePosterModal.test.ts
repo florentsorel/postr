@@ -105,35 +105,4 @@ describe("ChangePosterModal", () => {
       expect(emitted("update:open")).toEqual([[false]])
     })
   })
-
-  describe("Find online tab", () => {
-    it("shows TMDB, TVDB and Fanart.tv source buttons", async () => {
-      renderModal()
-      await userEvent.click(screen.getByRole("tab", { name: "Find online" }))
-      expect(screen.getByRole("button", { name: "TMDB" })).toBeInTheDocument()
-      expect(screen.getByRole("button", { name: "TVDB" })).toBeInTheDocument()
-      expect(screen.getByRole("button", { name: "Fanart.tv" })).toBeInTheDocument()
-    })
-
-    it("Apply is enabled after selecting a poster", async () => {
-      renderModal()
-      await userEvent.click(screen.getByRole("tab", { name: "Find online" }))
-      const posterButtons = screen
-        .getAllByRole("button")
-        .filter((b) => b.querySelector("img") !== null)
-      await userEvent.click(posterButtons[0])
-      expect(screen.getByRole("button", { name: "Apply" })).not.toBeDisabled()
-    })
-
-    it("Apply closes the modal", async () => {
-      const { emitted } = renderModal()
-      await userEvent.click(screen.getByRole("tab", { name: "Find online" }))
-      const posterButtons = screen
-        .getAllByRole("button")
-        .filter((b) => b.querySelector("img") !== null)
-      await userEvent.click(posterButtons[0])
-      await userEvent.click(screen.getByRole("button", { name: "Apply" }))
-      expect(emitted("update:open")).toEqual([[false]])
-    })
-  })
 })

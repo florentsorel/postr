@@ -6,7 +6,7 @@ A self-hosted web application for managing and updating poster artwork in Plex M
 
 ## Purpose
 
-Postr allows users to browse their Plex library and replace poster images for movies, TV series, seasons, and collections — either by uploading local files or fetching artwork from external poster sources.
+Postr allows users to browse their Plex library and replace poster images for movies, TV series, seasons, and collections — either by uploading local files or fetching artwork from direct image URLs.
 
 ---
 
@@ -30,7 +30,7 @@ Postr allows users to browse their Plex library and replace poster images for mo
 
 ---
 
-## Core Features
+## Core Features (V1)
 
 ### 1. Plex Library Import
 
@@ -46,81 +46,46 @@ Postr allows users to browse their Plex library and replace poster images for mo
 - During import, the current Plex poster for each item is **downloaded and stored locally** at `/data/posters/{type}/{ratingKey}.jpg`. The filename is the Plex `ratingKey` (string). Thumbnails are never served directly from Plex URLs (which require auth) — they are served by the Go backend at `/api/media/{ratingKey}/thumb`.
 - Smart comparison: for existing items, the poster is downloaded and compared byte-for-byte before any DB write. If identical, the item is counted as skipped and the DB upsert is skipped entirely.
 
-### 2. Poster Management
+### 2. Sync from Plex
 
-Each media card exposes two actions on hover:
+- Checks whether posters have been updated directly in Plex since the last import.
+- Only checks items that have **not** been locally modified by the user (`locally_modified = 0`).
+- Compares each local poster byte-for-byte with the current Plex poster. Updates any that have changed.
+- Streams real-time progress via SSE. Displays a progress bar while checking, then lists updated items on completion.
+- Does not add or remove items — only updates existing posters.
+- Button only visible when at least one item has been imported.
+
+### 3. Poster Management
+
+Each media card exposes actions on hover:
 
 **a) Change Poster**
-- Opens a modal with three tabs:
-  - **Upload** — user uploads an image file directly. Optional auto-resize to Plex-compatible dimensions.
-  - **Library** — browse images from previously uploaded ZIP packs (see § Poster Library). Displayed as a scrollable grid; user picks one image.
-  - **Find online** — queries enabled poster sources and displays results in a scrollable grid (infinite scroll). Sources are fetched in the order defined in Settings.
-  - **From URL** — user pastes a direct image URL or a Mediux YAML set URL. If a Mediux YAML URL is detected, it is fetched and parsed to display the posters it contains.
-- Once confirmed, the new poster is saved locally **and automatically pushed to Plex** in one step.
-
-**Poster sources:**
-
-| Source | API | Notes |
-| ------------ | --- | ------------------------------------ |
-| TMDB | ✅ | Official REST API, requires API key |
-| TVDB | ✅ | Official REST API v4, requires API key |
-| Fanart.tv | ✅ | Official REST API, requires API key |
-| Mediux | ❌ | No public API — may be supported later via YAML set URLs in "From URL" |
-| ThePosterDB | ❌ | No public API — may be supported later via the ZIP Library feature |
-
-TMDB, TVDB, and Fanart.tv are the only active sources. Mediux and ThePosterDB are not currently integrated — they may be revisited in a future iteration.
+- Opens a modal with two tabs:
+  - **Upload** — user uploads an image file directly (drag & drop or browse). Auto-resize to Plex-compatible dimensions (configurable).
+  - **From URL** — user pastes a direct image URL (JPG, PNG, WEBP). The server fetches the image server-side to avoid CORS issues.
+- Once confirmed, the new poster is saved locally and queued for push to Plex.
 
 **b) Send to Plex**
-- Pushes the locally stored poster to Plex without picking a new one.
-- Useful to restore a poster if Plex lost or overwrote it outside of Postr.
+- Pushes the locally modified poster directly to Plex.
+- Only visible on cards that have a pending change (item is in the queue).
 
 **c) Get from Plex**
-- Re-downloads the poster currently set in Plex for that item and overwrites the local copy.
-- Useful for resyncing when a poster was changed directly in Plex outside of Postr, or as a manual backup.
+- Re-downloads the poster currently set in Plex and overwrites the local copy.
+- Only visible on cards where the local poster has been locally modified (differs from Plex).
 
-### 3. Poster Library (ZIP Import)
+### 4. Queue
 
-A dedicated page (`/library`) for managing locally stored poster packs.
+- Lists all posters modified locally that are pending push to Plex.
+- Push one at a time or all at once with "Push all to Plex".
+- Removing an item from the queue restores the original Plex poster.
+- Button only visible when there are pending items.
 
-**Purpose:** Sites like ThePosterDB let users download a ZIP containing posters for an entire collection (e.g., all X-Men films + the collection art). Rather than re-uploading the same ZIP every time the "Change Poster" modal is opened, users upload once to the Library and reuse images from there.
-
-**Upload flow:**
-- User uploads a `.zip` file, gives it a friendly display name (e.g., "X-Men Collection" instead of "xmen-pack-by-toto-2024"), and optionally adds **tags** — free-form strings matching the media titles or franchises covered (e.g., `x-men`, `wolverine`, `logan`). A single pack can cover multiple franchises.
-- The backend extracts the ZIP and stores each image at `/data/library/{pack_id}/{filename}`
-- SQLite schema:
-  - `library_packs`: `id`, `name`, `created_at`
-  - `tags`: `id`, `name` (shared vocabulary)
-  - `library_pack_tags`: `pack_id`, `tag_id` (pack ↔ tag association)
-  - `media_tags`: `media_id`, `tag_id` (optional — reserved for future explicit media tagging)
-
-**In the Change Poster modal — "Library" tab:**
-- When the tab opens, packs are **automatically filtered**: if the media item has entries in `media_tags`, matching is done via tag intersection (`pack.tags ∩ media.tags ≠ ∅`); otherwise it falls back to a case-insensitive substring match of the media title against tag names. No tagging required from the user.
-- A "Show all packs" toggle clears the filter to browse the full library — useful when auto-filter misses a match.
-- Images are displayed in a scrollable grid (same UI as "Find online"). User picks one → works like any other poster selection.
-
-**Library page (`/library`):**
-- Lists all packs with name, tag list, image count, and upload date.
-- Upload form: ZIP file input + name field + tag input (pill input, autocomplete from existing tags).
-- Per-pack actions: view images, edit name/tags, delete (removes files + DB record).
-
-**Backend API:**
-- `GET /api/library` — list all packs (id, name, tags, image count, created_at)
-- `POST /api/library` — upload a ZIP + name + tags, returns the created pack
-- `GET /api/library/:id` — list images in a pack
-- `PATCH /api/library/:id` — update name and/or tags
-- `DELETE /api/library/:id` — delete a pack and its files
-- Images served at `/api/library/:id/:filename`
-
-**Storage:** `/data/library/{pack_id}/` — sibling of `/data/posters/`, covered by the same `DATA_PATH` env var.
-
-### 4. Settings
+### 5. Settings
 
 Two categories of settings:
 
 **Editable (stored in SQLite):**
-- Toggle which poster sources are enabled (TMDB, TVDB, Fanart.tv) and their order (drag to reorder — first enabled source is used by default)
-- API keys for TMDB, TVDB, Fanart.tv
-- Option to enable/disable automatic image resizing on upload
+- Option to enable/disable automatic image resizing on upload, and target width
 - Per-library enable/disable toggle (which Plex libraries are included in imports)
 
 **Read-only (from environment variables, displayed in UI but not editable):**
@@ -131,7 +96,7 @@ The backend exposes `GET /api/settings` which returns both env-based config (rea
 
 `PLEX_URL` is normalized at startup: scheme defaults to `http://` if omitted, trailing slashes and paths are stripped. Invalid schemes (non http/https) cause a startup error.
 
-### 4. Authentication (Optional)
+### 6. Authentication (Optional)
 
 - A login form protects the app for users who expose it to the public internet.
 - All auth credentials are configured exclusively via environment variables — no database storage.
@@ -143,13 +108,33 @@ The backend exposes `GET /api/settings` which returns both env-based config (rea
 
 - Media library is displayed in a **responsive grid layout** after import (2→3→4→5→6 columns).
 - Each card shows the locally stored poster thumbnail, title, type badge, and year.
-- On hover: **Change Poster**, **Send to Plex**, and **Get from Plex** action buttons appear.
+- On hover: **Change Poster**, **Send to Plex** (if queued), and **Get from Plex** (if locally modified) action buttons appear.
 - Tabs filter by type: All / Movies / TV Series / Seasons / Collections.
-- Sort options: Title (A–Z), Type, Year, Recently Added (`addedAt` from Plex, stored in SQLite).
+- Sort options: Title (A–Z), Year, Recently Added (`addedAt` from Plex, stored in SQLite).
 - Search bar filters by title in real time across **all items** (not scoped to the current page).
-- Tab, sort, and page are reflected in the URL as query params (`?tab=movie&sort=year&page=2`). The search is local-only (not in the URL). Page is preserved across tab/sort changes and clamped when search reduces the result count.
-- Empty state shown when no media has been imported yet, with a CTA to trigger the import.
-- The interface should feel clean and media-focused — dark theme with Plex yellow (`#E5A00D`) as primary color.
+- Tab, sort, and page are reflected in the URL as query params (`?tab=movie&sort=year&page=2`). The search is local-only (not in the URL).
+- Keyboard shortcuts: `?` toggles the help modal, `⌘K` / `Ctrl+K` focuses the search bar.
+- Help modal documents all features with per-button visibility rules.
+- Header buttons are conditionally visible: Import/Sync require Plex configured, Sync requires items imported, Queue requires pending items.
+- Error layout (502) shown when backend is unreachable.
+- `KeepAlive` on RouterView avoids skeleton flash when navigating back from Settings.
+- The interface feels clean and media-focused — dark theme with Plex yellow (`#E5A00D`) as primary color.
+
+---
+
+## Deferred for Future Versions
+
+The following features are **not implemented in V1**. Code stubs and detailed specs are preserved in `DEFERRED.md` (not versioned).
+
+### Poster Sources (TMDB / TVDB / Fanart.tv)
+- "Find online" tab in the Change Poster modal — search external databases and pick from a scrollable grid with infinite scroll.
+- API keys and source ordering configurable in Settings.
+- Backend already has the DB schema and `settings.go` handler for sources — only the API integration and frontend tab need to be wired up.
+
+### Poster Library (ZIP packs)
+- Upload ZIP files from sites like ThePosterDB, name them, tag them, and browse images in a "Library" tab in the Change Poster modal.
+- Dedicated `/library` page to manage packs (view, edit, delete).
+- Auto-filter by tag intersection or title match when opening the Library tab for a media item.
 
 ---
 
@@ -175,17 +160,26 @@ The application is packaged as a single Docker image containing both the Go back
 
 ## API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/settings` | Get all settings (env vars + DB) |
-| `POST` | `/api/settings` | Save editable settings (sources, options) |
-| `GET` | `/api/libraries` | List Plex libraries with enabled state from DB |
-| `POST` | `/api/libraries` | Save per-library enabled/disabled state |
-| `GET` | `/api/media` | List imported media items |
-| `GET` | `/api/plex/status` | Check if Plex is configured (URL + token set) |
-| `GET` | `/api/plex/ping` | Test Plex connectivity and token validity |
-| `POST` | `/api/plex/import` | Import media from Plex (SSE stream: progress, skip, done events) |
-| `GET` | `/api/media/:ratingKey/thumb` | Serve locally stored poster for a media item |
+| Method   | Path                               | Description                                        |
+| -------- | ---------------------------------- | -------------------------------------------------- |
+| `GET`    | `/api/settings`                    | Get all settings (env vars + DB)                   |
+| `POST`   | `/api/settings`                    | Save editable settings (options)                   |
+| `GET`    | `/api/libraries`                   | List Plex libraries with enabled state from DB     |
+| `POST`   | `/api/libraries`                   | Save per-library enabled/disabled state            |
+| `GET`    | `/api/media`                       | List imported media items                          |
+| `GET`    | `/api/media/:ratingKey/thumb`      | Serve locally stored poster for a media item       |
+| `POST`   | `/api/media/:ratingKey/upload`     | Upload a poster file (multipart)                   |
+| `POST`   | `/api/media/:ratingKey/upload-url` | Fetch and store a poster from a URL (server-side)  |
+| `POST`   | `/api/media/:ratingKey/push`       | Push local poster to Plex                          |
+| `GET`    | `/api/queue`                       | List pending poster changes                        |
+| `DELETE` | `/api/queue/:ratingKey`            | Remove item from queue (restores Plex poster)      |
+| `POST`   | `/api/queue/push-all`              | Push all queued posters to Plex                    |
+| `GET`    | `/api/plex/status`                 | Check if Plex is configured (URL + token set)      |
+| `GET`    | `/api/plex/ping`                   | Test Plex connectivity and token validity          |
+| `POST`   | `/api/plex/import`                 | Import media from Plex (SSE stream)                |
+| `POST`   | `/api/plex/sync`                   | Sync poster changes from Plex (SSE stream)         |
+
+---
 
 ## Project Structure
 
@@ -206,7 +200,8 @@ postr/
 │   └── src/
 │       ├── components/
 │       ├── composables/
-│       └── pages/
+│       ├── pages/
+│       └── stores/
 ├── Dockerfile
 └── AGENTS.md
 ```
