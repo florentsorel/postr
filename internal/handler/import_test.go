@@ -127,8 +127,8 @@ func TestImport_Deleted(t *testing.T) {
 	mock.allItemsFunc = func(ctx context.Context, sectionKey string) ([]plex.Item, error) {
 		return testItems[:1], nil
 	}
-	mock.downloadThumbFunc = func(ctx context.Context, thumbPath string) ([]byte, error) {
-		return []byte("updated-poster"), nil
+	mock.downloadThumbFunc = func(ctx context.Context, thumbPath string) ([]byte, string, error) {
+		return []byte("updated-poster"), "jpg", nil
 	}
 
 	second := runImport(t, setup.handler, importBody)

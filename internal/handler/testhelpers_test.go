@@ -74,7 +74,8 @@ type mockPlex struct {
 	allItemsFunc      func(ctx context.Context, sectionKey string) ([]plex.Item, error)
 	childrenFunc      func(ctx context.Context, ratingKey string) ([]plex.Item, error)
 	collectionsFunc   func(ctx context.Context, sectionKey string) ([]plex.Item, error)
-	downloadThumbFunc func(ctx context.Context, thumbPath string) ([]byte, error)
+	downloadThumbFunc func(ctx context.Context, thumbPath string) ([]byte, string, error)
+	uploadPosterFunc  func(ctx context.Context, ratingKey string, data []byte, contentType string) error
 }
 
 func (m *mockPlex) Sections(ctx context.Context) ([]plex.Section, error) {
@@ -95,9 +96,15 @@ func (m *mockPlex) Collections(ctx context.Context, sectionKey string) ([]plex.I
 	}
 	return nil, nil
 }
-func (m *mockPlex) DownloadThumb(ctx context.Context, thumbPath string) ([]byte, error) {
+func (m *mockPlex) DownloadThumb(ctx context.Context, thumbPath string) ([]byte, string, error) {
 	if m.downloadThumbFunc != nil {
 		return m.downloadThumbFunc(ctx, thumbPath)
 	}
-	return []byte("fake-poster"), nil
+	return []byte("fake-poster"), "jpg", nil
+}
+func (m *mockPlex) UploadPoster(ctx context.Context, ratingKey string, data []byte, contentType string) error {
+	if m.uploadPosterFunc != nil {
+		return m.uploadPosterFunc(ctx, ratingKey, data, contentType)
+	}
+	return nil
 }

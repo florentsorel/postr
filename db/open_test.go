@@ -21,10 +21,11 @@ func TestOpen_RunsMigrations(t *testing.T) {
 	}
 
 	want := map[string]string{
-		"tmdb":        "false",
-		"tvdb":        "false",
-		"fanart":      "false",
-		"auto_resize": "true",
+		"tmdb":         "false",
+		"tvdb":         "false",
+		"fanart":       "false",
+		"auto_resize":  "true",
+		"resize_width": "1000",
 	}
 
 	if len(settings) != len(want) {

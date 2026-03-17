@@ -9,3 +9,4 @@ linters:
         - (*os.File).Close
         - (io.ReadCloser).Close
         - fmt.Fprintf
+        - (mime/multipart.File).Close

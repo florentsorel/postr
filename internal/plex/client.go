@@ -1,12 +1,14 @@
 package plex
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -29,27 +31,87 @@ func NewClient(baseURL, token string) *Client {
 }
 
 // DownloadThumb fetches a raw image from a Plex thumb path (e.g. /library/metadata/123/thumb/...).
-func (c *Client) DownloadThumb(ctx context.Context, thumbPath string) ([]byte, error) {
+// It returns the image bytes, detected file extension (jpg/png/webp), and any error.
+func (c *Client) DownloadThumb(ctx context.Context, thumbPath string) ([]byte, string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+thumbPath, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	req.Header.Set("X-Plex-Token", c.token)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, ErrUnauthorized
+		return nil, "", ErrUnauthorized
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("plex returned %d for thumb %s", resp.StatusCode, thumbPath)
+		return nil, "", fmt.Errorf("plex returned %d for thumb %s", resp.StatusCode, thumbPath)
 	}
 
-	return io.ReadAll(resp.Body)
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", err
+	}
+
+	ext := extFromContentType(resp.Header.Get("Content-Type"))
+	return data, ext, nil
+}
+
+// extFromContentType maps a Content-Type header value to a file extension.
+func extFromContentType(ct string) string {
+	ct = strings.ToLower(strings.TrimSpace(ct))
+	if idx := strings.Index(ct, ";"); idx >= 0 {
+		ct = strings.TrimSpace(ct[:idx])
+	}
+	switch ct {
+	case "image/png":
+		return "png"
+	case "image/webp":
+		return "webp"
+	default:
+		return "jpg"
+	}
+}
+
+// ContentTypeFromExt maps a file extension to a MIME content type.
+func ContentTypeFromExt(ext string) string {
+	switch strings.ToLower(ext) {
+	case "png":
+		return "image/png"
+	case "webp":
+		return "image/webp"
+	default:
+		return "image/jpeg"
+	}
+}
+
+// UploadPoster uploads an image to Plex as the poster for the given ratingKey.
+func (c *Client) UploadPoster(ctx context.Context, ratingKey string, data []byte, contentType string) error {
+	url := c.baseURL + "/library/metadata/" + ratingKey + "/posters"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Plex-Token", c.token)
+	req.Header.Set("Content-Type", contentType)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return ErrUnauthorized
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("plex returned %d when uploading poster for %s", resp.StatusCode, ratingKey)
+	}
+	return nil
 }
 
 func (c *Client) get(ctx context.Context, path string, out any) error {

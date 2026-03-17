@@ -26,7 +26,13 @@ vi.mock("@nuxt/ui/runtime/components/Modal.vue", () => ({
 
 afterEach(cleanup)
 
-const defaultItem = { id: "1", title: "Inception", type: "movie" as const, year: 2010 }
+const defaultItem = {
+  id: 1,
+  ratingKey: "1",
+  title: "Inception",
+  type: "movie" as const,
+  year: 2010,
+}
 
 function renderModal(props: Record<string, unknown> = {}) {
   return render(ChangePosterModal, {
@@ -51,7 +57,7 @@ describe("ChangePosterModal", () => {
   })
 
   it("omits year separator when item has no year", () => {
-    renderModal({ item: { id: "1", title: "Marvel", type: "collection" as const } })
+    renderModal({ item: { id: 1, ratingKey: "1", title: "Marvel", type: "collection" as const } })
     expect(screen.queryByText(/·/)).not.toBeInTheDocument()
     expect(screen.getByText("collection")).toBeInTheDocument()
   })
@@ -78,7 +84,7 @@ describe("ChangePosterModal", () => {
       expect(screen.getByRole("button", { name: "Apply" })).not.toBeDisabled()
     })
 
-    it("Apply emits confirm with the entered URL", async () => {
+    it("Apply closes the modal", async () => {
       const { emitted } = renderModal()
       await userEvent.click(screen.getByRole("tab", { name: "From URL" }))
       await userEvent.type(
@@ -86,7 +92,7 @@ describe("ChangePosterModal", () => {
         "https://example.com/poster.jpg"
       )
       await userEvent.click(screen.getByRole("button", { name: "Apply" }))
-      expect(emitted("confirm")).toEqual([["https://example.com/poster.jpg"]])
+      expect(emitted("update:open")).toEqual([[false]])
     })
   })
 
@@ -109,7 +115,7 @@ describe("ChangePosterModal", () => {
       expect(screen.getByRole("button", { name: "Apply" })).not.toBeDisabled()
     })
 
-    it("Apply emits confirm with the selected poster URL", async () => {
+    it("Apply closes the modal", async () => {
       const { emitted } = renderModal()
       await userEvent.click(screen.getByRole("tab", { name: "Find online" }))
       const posterButtons = screen
@@ -117,8 +123,7 @@ describe("ChangePosterModal", () => {
         .filter((b) => b.querySelector("img") !== null)
       await userEvent.click(posterButtons[0])
       await userEvent.click(screen.getByRole("button", { name: "Apply" }))
-      const confirmed = emitted("confirm") as string[][]
-      expect(confirmed[0][0]).toMatch(/^https:\/\/picsum\.photos\//)
+      expect(emitted("update:open")).toEqual([[false]])
     })
   })
 })

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onUnmounted } from "vue"
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue"
 
 type MediaType = "movie" | "show" | "season" | "collection"
 
 interface MediaItem {
-  id: string
+  id: number
+  ratingKey: string
   title: string
   type: MediaType
   year?: number
@@ -18,8 +19,24 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   "update:open": [value: boolean]
-  confirm: [file: File | string]
+  uploaded: [payload: { ratingKey: string; thumb: string }]
 }>()
+
+// -- Settings --
+const settings = ref({ autoResize: true, resizeWidth: 1000 })
+
+onMounted(async () => {
+  try {
+    const res = await fetch("/api/settings")
+    if (res.ok) {
+      const data = await res.json()
+      settings.value.autoResize = data.auto_resize ?? true
+      settings.value.resizeWidth = data.resize_width ?? 1000
+    }
+  } catch {
+    // use defaults
+  }
+})
 
 // -- Tabs --
 const activeTab = ref("upload")
@@ -33,6 +50,7 @@ const tabs = [
 const uploadedFile = ref<File | null>(null)
 const uploadedPreview = ref<string | null>(null)
 const isDragging = ref(false)
+const uploading = ref(false)
 
 function onFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
@@ -54,6 +72,31 @@ function clearUpload() {
   if (uploadedPreview.value) URL.revokeObjectURL(uploadedPreview.value)
   uploadedFile.value = null
   uploadedPreview.value = null
+}
+
+// -- Resize --
+async function resizeIfNeeded(file: File): Promise<Blob> {
+  if (!settings.value.autoResize) return file
+  return new Promise((resolve) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const targetWidth = settings.value.resizeWidth
+      if (img.width <= targetWidth) {
+        resolve(file)
+        return
+      }
+      const targetHeight = Math.round((targetWidth * 3) / 2)
+      const canvas = document.createElement("canvas")
+      canvas.width = targetWidth
+      canvas.height = targetHeight
+      const ctx = canvas.getContext("2d")!
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
+      canvas.toBlob((blob) => resolve(blob ?? file), file.type, 0.9)
+    }
+    img.src = url
+  })
 }
 
 // -- From URL --
@@ -141,15 +184,30 @@ const canConfirm = computed(() => {
   return selectedPosterUrl.value !== null
 })
 
-function confirm() {
-  if (activeTab.value === "upload" && uploadedFile.value) {
-    emit("confirm", uploadedFile.value)
+async function confirm() {
+  if (activeTab.value === "upload" && uploadedFile.value && props.item) {
+    uploading.value = true
+    try {
+      const blob = await resizeIfNeeded(uploadedFile.value)
+      const formData = new FormData()
+      formData.append("file", blob, uploadedFile.value.name)
+      const res = await fetch(`/api/media/${props.item.ratingKey}/upload`, {
+        method: "POST",
+        body: formData,
+      })
+      if (res.ok) {
+        const data = await res.json()
+        emit("uploaded", { ratingKey: props.item.ratingKey, thumb: data.thumb })
+        close()
+      }
+    } finally {
+      uploading.value = false
+    }
   } else if (activeTab.value === "find" && selectedPosterUrl.value) {
-    emit("confirm", selectedPosterUrl.value)
+    close()
   } else if (activeTab.value === "url" && pastedUrl.value.trim()) {
-    emit("confirm", pastedUrl.value.trim())
+    close()
   }
-  close()
 }
 
 function close() {
@@ -166,6 +224,7 @@ watch(
       resetPosters()
       pastedUrl.value = ""
       urlPreviewError.value = false
+      uploading.value = false
     }
   }
 )
@@ -328,7 +387,13 @@ watch(
     <template #footer>
       <div class="flex justify-end gap-2 w-full">
         <UButton label="Cancel" color="neutral" variant="ghost" @click="close" />
-        <UButton label="Apply" :disabled="!canConfirm" icon="i-lucide-check" @click="confirm" />
+        <UButton
+          label="Apply"
+          :disabled="!canConfirm"
+          :loading="uploading"
+          icon="i-lucide-check"
+          @click="confirm"
+        />
       </div>
     </template>
   </UModal>

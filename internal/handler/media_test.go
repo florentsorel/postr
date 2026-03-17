@@ -47,8 +47,8 @@ func TestGetMedia(t *testing.T) {
 			if !strings.HasPrefix(item.Thumb, "/api/media/") {
 				t.Errorf("item %q: thumb URL want prefix /api/media/, got %q", item.Title, item.Thumb)
 			}
-			if !strings.HasSuffix(item.Thumb, "/thumb") {
-				t.Errorf("item %q: thumb URL want suffix /thumb, got %q", item.Title, item.Thumb)
+			if !strings.Contains(item.Thumb, "/thumb") {
+				t.Errorf("item %q: thumb URL want /thumb, got %q", item.Title, item.Thumb)
 			}
 		}
 	})

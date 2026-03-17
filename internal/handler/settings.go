@@ -3,6 +3,7 @@ package handler
 import (
 	"database/sql"
 	"net/http"
+	"strconv"
 
 	"github.com/florentsorel/postr/db"
 	"github.com/labstack/echo/v5"
@@ -23,6 +24,7 @@ type settingsResponse struct {
 	AuthUser     string           `json:"auth_user"`
 	AuthPassSet  bool             `json:"auth_pass_set"`
 	AutoResize   bool             `json:"auto_resize"`
+	ResizeWidth  int              `json:"resize_width"`
 	Sources      []sourceResponse `json:"sources"`
 }
 
@@ -45,6 +47,7 @@ func (h *Handler) GetSettings(c *echo.Context) error {
 		AuthUser:     h.config.AuthUser,
 		AuthPassSet:  h.config.AuthPass != "",
 		AutoResize:   true,
+		ResizeWidth:  1000,
 	}
 
 	for _, s := range settings {
@@ -62,8 +65,15 @@ func (h *Handler) GetSettings(c *echo.Context) error {
 				Position:    s.Position.Int64,
 			})
 		case "option":
-			if s.Key == "auto_resize" {
+			switch s.Key {
+			case "auto_resize":
 				resp.AutoResize = s.Value.Valid && s.Value.String == "true"
+			case "resize_width":
+				if s.Value.Valid && s.Value.String != "" {
+					if w, err := strconv.Atoi(s.Value.String); err == nil && w > 0 {
+						resp.ResizeWidth = w
+					}
+				}
 			}
 		}
 	}
@@ -79,7 +89,8 @@ type saveSourceRequest struct {
 type saveSettingsRequest struct {
 	Sources []saveSourceRequest `json:"sources"`
 	Options struct {
-		AutoResize bool `json:"autoResize"`
+		AutoResize  bool `json:"autoResize"`
+		ResizeWidth int  `json:"resizeWidth"`
 	} `json:"options"`
 }
 
@@ -116,6 +127,18 @@ func (h *Handler) SaveSettings(c *echo.Context) error {
 		Value: sql.NullString{String: autoResize, Valid: true},
 		Type:  "option",
 		Key:   "auto_resize",
+	}); err != nil {
+		return jsonInternalError(c)
+	}
+
+	resizeWidth := req.Options.ResizeWidth
+	if req.Options.AutoResize && resizeWidth < 500 {
+		return jsonError(c, http.StatusUnprocessableEntity, "Target width must be at least 500px")
+	}
+	if err := h.db.UpdateSetting(ctx, db.UpdateSettingParams{
+		Value: sql.NullString{String: strconv.Itoa(resizeWidth), Valid: true},
+		Type:  "option",
+		Key:   "resize_width",
 	}); err != nil {
 		return jsonInternalError(c)
 	}

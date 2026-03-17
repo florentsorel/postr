@@ -20,7 +20,7 @@ ON CONFLICT (rating_key) DO UPDATE SET
     updated_at    = excluded.updated_at;
 
 -- name: ListMedia :many
-SELECT id, library_id, rating_key, title, type, year, season_number, thumb, added_at, created_at
+SELECT id, library_id, rating_key, title, type, year, season_number, thumb, added_at, created_at, updated_at
 FROM media
 ORDER BY added_at DESC NULLS LAST;
 
@@ -37,3 +37,6 @@ DELETE FROM media WHERE rating_key = ?;
 
 -- name: DeleteMediaByLibrary :exec
 DELETE FROM media WHERE library_id = ?;
+
+-- name: UpdateMediaThumb :exec
+UPDATE media SET thumb = ?, updated_at = ? WHERE rating_key = ?;
