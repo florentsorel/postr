@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue"
+import PosterPreview from "./PosterPreview.vue"
 
 type MediaType = "movie" | "show" | "season" | "collection"
 
@@ -101,11 +102,6 @@ async function resizeIfNeeded(file: File): Promise<Blob> {
 
 // -- From URL --
 const pastedUrl = ref("")
-const urlPreviewError = ref(false)
-
-watch(pastedUrl, () => {
-  urlPreviewError.value = false
-})
 
 // -- Find online --
 const SOURCES = ["TMDB", "TVDB", "Fanart.tv"]
@@ -180,7 +176,7 @@ onUnmounted(() => observer?.disconnect())
 // -- Confirm --
 const canConfirm = computed(() => {
   if (activeTab.value === "upload") return uploadedFile.value !== null
-  if (activeTab.value === "url") return pastedUrl.value.trim().length > 0 && !urlPreviewError.value
+  if (activeTab.value === "url") return pastedUrl.value.trim().length > 0
   return selectedPosterUrl.value !== null
 })
 
@@ -205,8 +201,22 @@ async function confirm() {
     }
   } else if (activeTab.value === "find" && selectedPosterUrl.value) {
     close()
-  } else if (activeTab.value === "url" && pastedUrl.value.trim()) {
-    close()
+  } else if (activeTab.value === "url" && pastedUrl.value.trim() && props.item) {
+    uploading.value = true
+    try {
+      const res = await fetch(`/api/media/${props.item.ratingKey}/upload-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: pastedUrl.value.trim() }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        emit("uploaded", { ratingKey: props.item.ratingKey, thumb: data.thumb })
+        close()
+      }
+    } finally {
+      uploading.value = false
+    }
   }
 }
 
@@ -223,7 +233,6 @@ watch(
       clearUpload()
       resetPosters()
       pastedUrl.value = ""
-      urlPreviewError.value = false
       uploading.value = false
     }
   }
@@ -246,21 +255,12 @@ watch(
       <!-- Upload tab -->
       <div v-if="activeTab === 'upload'">
         <!-- Preview -->
-        <div v-if="uploadedPreview" class="relative mb-4">
-          <img
-            :src="uploadedPreview"
-            alt="Preview"
-            class="w-full max-h-64 object-contain rounded-lg bg-neutral-800"
-          />
-          <UButton
-            icon="i-lucide-x"
-            size="xs"
-            color="neutral"
-            variant="solid"
-            class="absolute top-2 right-2"
-            @click="clearUpload"
-          />
-        </div>
+        <PosterPreview
+          v-if="uploadedPreview"
+          :src="uploadedPreview"
+          clearable
+          @clear="clearUpload"
+        />
 
         <!-- Drop zone -->
         <label
@@ -295,24 +295,7 @@ watch(
           size="lg"
           autofocus
         />
-        <div v-if="pastedUrl.trim()" class="flex justify-center">
-          <div class="relative w-40 aspect-[2/3] rounded-lg overflow-hidden bg-neutral-800">
-            <img
-              v-if="!urlPreviewError"
-              :src="pastedUrl.trim()"
-              alt="Preview"
-              class="w-full h-full object-cover"
-              @error="urlPreviewError = true"
-            />
-            <div
-              v-else
-              class="w-full h-full flex flex-col items-center justify-center gap-2 text-neutral-500"
-            >
-              <UIcon name="i-lucide-image-off" class="w-6 h-6" />
-              <p class="text-xs text-center px-2">Unable to load image</p>
-            </div>
-          </div>
-        </div>
+        <PosterPreview v-if="pastedUrl.trim()" :src="pastedUrl.trim()" />
       </div>
 
       <!-- Find online tab -->

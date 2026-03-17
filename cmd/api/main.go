@@ -45,6 +45,7 @@ func main() {
 	api.GET("/media", h.GetMedia)
 	api.GET("/media/:ratingKey/thumb", h.GetMediaThumb)
 	api.POST("/media/:ratingKey/upload", h.UploadMediaPoster)
+	api.POST("/media/:ratingKey/upload-url", h.UploadPosterFromURL)
 	api.POST("/media/:ratingKey/push", h.PushPoster)
 
 	api.GET("/queue", h.GetQueue)
@@ -54,6 +55,7 @@ func main() {
 	api.GET("/plex/status", h.GetPlexStatus)
 	api.GET("/plex/ping", h.PingPlex)
 	api.POST("/plex/import", h.ImportFromPlex)
+	api.POST("/plex/sync", h.SyncFromPlex)
 
 	if err := e.Start(":8080"); err != nil {
 		e.Logger.Error("failed to start server", "error", err)
