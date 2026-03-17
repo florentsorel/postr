@@ -6,6 +6,7 @@ import MediaCard from "../components/MediaCard.vue"
 import ChangePosterModal from "../components/ChangePosterModal.vue"
 import ImportModal from "../components/ImportModal.vue"
 import QueuePanel from "../components/QueuePanel.vue"
+import ErrorLayout from "../components/ErrorLayout.vue"
 import { useLibraryUiStore } from "@/stores/useLibraryUiStore"
 import { useQueueStore } from "@/stores/useQueueStore"
 
@@ -21,6 +22,7 @@ interface MediaItem {
   seasonNumber?: number
   thumb?: string
   addedAt?: number
+  locallyModified: boolean
 }
 
 const route = useRoute()
@@ -87,33 +89,42 @@ const page = computed<number>({
 })
 
 const loading = ref(false)
+const backendError = ref(false)
 const importModalOpen = ref(false)
 const queuePanelOpen = ref(false)
 const plexConfigured = ref<boolean | null>(null)
 
 onMounted(async () => {
   loading.value = true
-  const [statusRes, mediaRes] = await Promise.allSettled([
-    fetch("/api/plex/status"),
-    fetch("/api/media"),
-  ])
+  try {
+    const [statusRes, mediaRes] = await Promise.all([
+      fetch("/api/plex/status"),
+      fetch("/api/media"),
+    ])
 
-  plexConfigured.value =
-    statusRes.status === "fulfilled" && statusRes.value.ok
-      ? (await statusRes.value.json()).configured
-      : false
+    if (mediaRes.status >= 500) {
+      backendError.value = true
+      return
+    }
 
-  if (mediaRes.status === "fulfilled" && mediaRes.value.ok) {
-    media.value = await mediaRes.value.json()
+    plexConfigured.value = statusRes.ok ? (await statusRes.json()).configured : false
+
+    if (mediaRes.ok) {
+      media.value = await mediaRes.json()
+    }
+    queueStore.loadQueue()
+  } catch {
+    backendError.value = true
+  } finally {
+    loading.value = false
   }
-  loading.value = false
-  queueStore.loadQueue()
 })
 const toast = useToast()
 
 async function sendToPlex(item: MediaItem) {
   try {
     await queueStore.pushOne(item.ratingKey)
+    item.locallyModified = false
   } catch (e) {
     toast.add({
       title: "Failed to push to Plex",
@@ -126,9 +137,10 @@ async function sendToPlex(item: MediaItem) {
 
 async function getFromPlex(item: MediaItem) {
   const thumb = await queueStore.removeItem(item.ratingKey)
-  if (thumb) {
-    const found = media.value.find((m) => m.ratingKey === item.ratingKey)
-    if (found) found.thumb = thumb
+  const found = media.value.find((m) => m.ratingKey === item.ratingKey)
+  if (found) {
+    if (thumb) found.thumb = thumb
+    found.locallyModified = false
   }
 }
 
@@ -145,6 +157,7 @@ function onUploaded(payload: { ratingKey: string; thumb: string }) {
   const item = media.value.find((m) => m.ratingKey === payload.ratingKey)
   if (item) {
     item.thumb = cacheBusted
+    item.locallyModified = true
   }
   if (selectedItem.value && selectedItem.value.ratingKey === payload.ratingKey) {
     queueStore.addItem({
@@ -246,7 +259,8 @@ async function onImported() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#1f1f1f] text-white">
+  <ErrorLayout v-if="backendError" :code="502" message="The backend is unreachable." />
+  <div v-else class="min-h-screen bg-[#1f1f1f] text-white">
     <!-- Header -->
     <header class="border-b border-neutral-800 px-6 py-4 flex items-center gap-4">
       <div class="flex items-center gap-2">
@@ -388,6 +402,7 @@ async function onImported() {
             :syncing="queueStore.isPushing(item.ratingKey)"
             :pulling="queueStore.isPulling(item.ratingKey)"
             :in-queue="queueStore.items.some((q) => q.ratingKey === item.ratingKey)"
+            :locally-modified="item.locallyModified"
             @change-poster="openPosterModal(item)"
             @send-to-plex="sendToPlex(item)"
             @get-from-plex="getFromPlex(item)"
@@ -407,14 +422,22 @@ async function onImported() {
       </template>
     </div>
 
-    <ChangePosterModal v-model:open="posterModal" :item="selectedItem" @uploaded="onUploaded" />
+    <ChangePosterModal
+      v-if="posterModal"
+      v-model:open="posterModal"
+      :item="selectedItem"
+      @uploaded="onUploaded"
+    />
     <ImportModal v-model:open="importModalOpen" @imported="onImported" />
     <QueuePanel
       v-model:open="queuePanelOpen"
       @restored="
         ({ ratingKey, thumb }) => {
           const m = media.find((i) => i.ratingKey === ratingKey)
-          if (m) m.thumb = thumb
+          if (m) {
+            m.thumb = thumb
+            m.locallyModified = false
+          }
         }
       "
     />

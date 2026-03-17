@@ -10,6 +10,7 @@ interface Props {
   syncing?: boolean
   pulling?: boolean
   inQueue?: boolean
+  locallyModified?: boolean
 }
 
 defineProps<Props>()
@@ -29,7 +30,7 @@ const typeLabel: Record<MediaType, string> = {
 </script>
 
 <template>
-  <div class="group flex flex-col gap-2 cursor-pointer">
+  <div class="group flex flex-col gap-2">
     <!-- Poster -->
     <div class="relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800">
       <img
@@ -70,6 +71,7 @@ const typeLabel: Record<MediaType, string> = {
           Change poster
         </UButton>
         <UButton
+          v-if="inQueue"
           icon="i-lucide-upload"
           size="sm"
           variant="outline"
@@ -80,6 +82,7 @@ const typeLabel: Record<MediaType, string> = {
           Send to Plex
         </UButton>
         <UButton
+          v-if="locallyModified"
           icon="i-lucide-download"
           size="sm"
           variant="outline"

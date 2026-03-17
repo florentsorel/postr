@@ -70,6 +70,13 @@ func (h *Handler) RemoveFromQueue(c *echo.Context) error {
 				}); err != nil {
 					c.Logger().Warn("failed to update thumb after pull")
 				}
+				if err := h.db.SetLocallyModified(ctx, db.SetLocallyModifiedParams{
+					LocallyModified: 0,
+					UpdatedAt:       now,
+					RatingKey:       ratingKey,
+				}); err != nil {
+					c.Logger().Warn("failed to clear locally_modified after pull")
+				}
 			}
 		}
 	}

@@ -5,6 +5,7 @@ import MediaCard from "./MediaCard.vue"
 
 const stubs = {
   UIcon: { template: "<span />" },
+  UTooltip: { template: "<slot />" },
 }
 
 describe("MediaCard", () => {
@@ -58,9 +59,18 @@ describe("MediaCard", () => {
     expect(emitted("changePoster")).toHaveLength(1)
   })
 
-  it("emits sendToPlex when Send to Plex is clicked", async () => {
+  it("hides Send to Plex when not in queue", () => {
+    render(MediaCard, {
+      props: { title: "Inception", type: "movie", inQueue: false },
+      global: { stubs },
+    })
+
+    expect(screen.queryByText("Send to Plex")).not.toBeInTheDocument()
+  })
+
+  it("emits sendToPlex when Send to Plex is clicked and inQueue", async () => {
     const { emitted } = render(MediaCard, {
-      props: { title: "Inception", type: "movie" },
+      props: { title: "Inception", type: "movie", inQueue: true },
       global: { stubs },
     })
 
@@ -68,9 +78,18 @@ describe("MediaCard", () => {
     expect(emitted("sendToPlex")).toHaveLength(1)
   })
 
-  it("emits getFromPlex when Get from Plex is clicked", async () => {
+  it("hides Get from Plex when not locally modified", () => {
+    render(MediaCard, {
+      props: { title: "Inception", type: "movie", locallyModified: false },
+      global: { stubs },
+    })
+
+    expect(screen.queryByText("Get from Plex")).not.toBeInTheDocument()
+  })
+
+  it("emits getFromPlex when Get from Plex is clicked and locallyModified", async () => {
     const { emitted } = render(MediaCard, {
-      props: { title: "Inception", type: "movie" },
+      props: { title: "Inception", type: "movie", locallyModified: true },
       global: { stubs },
     })
 

@@ -42,3 +42,10 @@ const router = createRouter({
 // This avoids individual vi.mock() calls for every component and ensures
 // virtual Nuxt modules (#imports, #build/ui/*) are properly resolved.
 config.global.plugins = [router, ui]
+
+// UTooltip requires a TooltipProvider context (provided by UApp) which is
+// not present in unit tests — stub it globally to render its slot content.
+config.global.stubs = {
+  UTooltip: { template: "<slot />" },
+  Tooltip: { template: "<slot />" },
+}
