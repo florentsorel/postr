@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue"
 import { useQueueStore } from "@/stores/useQueueStore"
+import MediaItemRow from "./MediaItemRow.vue"
 
 defineProps<{ open: boolean }>()
 const emit = defineEmits<{
@@ -36,17 +37,6 @@ async function pushOne(ratingKey: string) {
     pushingItem.value = null
   }
 }
-
-function typeLabel(type: string, seasonNumber?: number): string {
-  if (type === "season" && seasonNumber) return `Season · S${seasonNumber}`
-  const labels: Record<string, string> = {
-    movie: "Movie",
-    show: "TV Series",
-    season: "Season",
-    collection: "Collection",
-  }
-  return labels[type] ?? type
-}
 </script>
 
 <template>
@@ -66,14 +56,14 @@ function typeLabel(type: string, seasonNumber?: number): string {
         <p class="text-neutral-400 text-sm">Nothing pending — all posters are in sync.</p>
       </div>
       <div v-else class="flex flex-col divide-y divide-neutral-800 max-h-96 overflow-y-auto pr-2">
-        <div v-for="item in queue.items" :key="item.ratingKey" class="flex items-center gap-3 py-3">
-          <div class="w-10 h-14 rounded-md overflow-hidden bg-neutral-800 shrink-0">
-            <img :src="item.thumb" :alt="item.title" class="w-full h-full object-cover" />
-          </div>
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium text-white truncate">{{ item.title }}</p>
-            <p class="text-xs text-neutral-500">{{ typeLabel(item.type, item.seasonNumber) }}</p>
-          </div>
+        <MediaItemRow
+          v-for="item in queue.items"
+          :key="item.ratingKey"
+          :thumb="item.thumb"
+          :title="item.title"
+          :type="item.type"
+          :season-number="item.seasonNumber"
+        >
           <div class="flex items-center gap-2 shrink-0">
             <UButton
               icon="i-lucide-upload"
@@ -100,7 +90,7 @@ function typeLabel(type: string, seasonNumber?: number): string {
               />
             </UTooltip>
           </div>
-        </div>
+        </MediaItemRow>
       </div>
     </template>
     <template #footer>

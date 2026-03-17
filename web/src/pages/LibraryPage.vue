@@ -6,6 +6,8 @@ import MediaCard from "../components/MediaCard.vue"
 import ChangePosterModal from "../components/ChangePosterModal.vue"
 import ImportModal from "../components/ImportModal.vue"
 import QueuePanel from "../components/QueuePanel.vue"
+import SyncCheckModal from "../components/SyncCheckModal.vue"
+import HelpModal from "../components/HelpModal.vue"
 import ErrorLayout from "../components/ErrorLayout.vue"
 import { useLibraryUiStore } from "@/stores/useLibraryUiStore"
 import { useQueueStore } from "@/stores/useQueueStore"
@@ -92,6 +94,17 @@ const loading = ref(false)
 const backendError = ref(false)
 const importModalOpen = ref(false)
 const queuePanelOpen = ref(false)
+const syncModalOpen = ref(false)
+const helpModalOpen = ref(false)
+
+defineShortcuts({
+  "?": () => {
+    helpModalOpen.value = !helpModalOpen.value
+  },
+  meta_k: () => {
+    searchInput.value?.inputRef?.focus()
+  },
+})
 const plexConfigured = ref<boolean | null>(null)
 
 onMounted(async () => {
@@ -110,7 +123,7 @@ onMounted(async () => {
     plexConfigured.value = statusRes.ok ? (await statusRes.json()).configured : false
 
     if (mediaRes.ok) {
-      media.value = await mediaRes.json()
+      mediaItems.value = await mediaRes.json()
     }
     queueStore.loadQueue()
   } catch {
@@ -137,7 +150,7 @@ async function sendToPlex(item: MediaItem) {
 
 async function getFromPlex(item: MediaItem) {
   const thumb = await queueStore.removeItem(item.ratingKey)
-  const found = media.value.find((m) => m.ratingKey === item.ratingKey)
+  const found = mediaItems.value.find((m) => m.ratingKey === item.ratingKey)
   if (found) {
     if (thumb) found.thumb = thumb
     found.locallyModified = false
@@ -154,7 +167,7 @@ function openPosterModal(item: MediaItem) {
 
 function onUploaded(payload: { ratingKey: string; thumb: string }) {
   const cacheBusted = payload.thumb + "?t=" + Date.now()
-  const item = media.value.find((m) => m.ratingKey === payload.ratingKey)
+  const item = mediaItems.value.find((m) => m.ratingKey === payload.ratingKey)
   if (item) {
     item.thumb = cacheBusted
     item.locallyModified = true
@@ -171,7 +184,7 @@ function onUploaded(payload: { ratingKey: string; thumb: string }) {
 }
 
 // Will be replaced by real API data
-const media = ref<MediaItem[]>([])
+const mediaItems = ref<MediaItem[]>([])
 
 const tabs = [
   { label: "All", value: "all" },
@@ -182,6 +195,7 @@ const tabs = [
 ]
 
 const search = ref("")
+const searchInput = ref<{ inputRef: HTMLInputElement } | null>(null)
 const PER_PAGE = 18
 
 const ALL_SORT_OPTIONS = [
@@ -204,7 +218,9 @@ const titleTypeOrder: Record<Exclude<MediaType, "all">, number> = {
 
 const filtered = computed(() => {
   const byTab =
-    activeTab.value === "all" ? media.value : media.value.filter((m) => m.type === activeTab.value)
+    activeTab.value === "all"
+      ? mediaItems.value
+      : mediaItems.value.filter((m) => m.type === activeTab.value)
 
   const searched = search.value.trim()
     ? byTab.filter((m) => m.title.toLowerCase().includes(search.value.toLowerCase().trim()))
@@ -253,8 +269,18 @@ const activeTabLabel = computed(
 
 async function onImported() {
   const res = await fetch("/api/media")
-  if (res.ok) media.value = await res.json()
+  if (res.ok) mediaItems.value = await res.json()
   queueStore.loadQueue()
+}
+
+function onSynced(items: Array<{ ratingKey: string; updatedAt: number }>) {
+  for (const changed of items) {
+    const m = mediaItems.value.find((i) => i.ratingKey === changed.ratingKey)
+    if (m) {
+      m.thumb = `/api/media/${changed.ratingKey}/thumb?v=${changed.updatedAt}`
+      m.locallyModified = false
+    }
+  }
 }
 </script>
 
@@ -271,40 +297,67 @@ async function onImported() {
       </div>
 
       <div class="ml-auto flex items-center gap-3">
-        <UButton
-          icon="i-lucide-refresh-cw"
-          variant="outline"
-          color="neutral"
-          size="sm"
-          @click="importModalOpen = true"
+        <UTooltip text="Import library from Plex and download posters">
+          <UButton
+            icon="i-lucide-refresh-cw"
+            variant="outline"
+            color="neutral"
+            size="sm"
+            @click="importModalOpen = true"
+          >
+            Import from Plex
+          </UButton>
+        </UTooltip>
+        <UTooltip
+          v-if="plexConfigured && mediaItems.length > 0"
+          text="Detect poster changes made directly in Plex"
         >
-          Import from Plex
-        </UButton>
-        <UButton
-          icon="i-lucide-upload-cloud"
-          variant="ghost"
-          color="neutral"
-          size="sm"
-          @click="queuePanelOpen = true"
-        >
-          <template v-if="queueStore.count > 0">
+          <UButton
+            icon="i-lucide-scan-search"
+            variant="ghost"
+            color="neutral"
+            size="sm"
+            @click="syncModalOpen = true"
+          >
+            Sync from Plex
+          </UButton>
+        </UTooltip>
+        <UTooltip v-if="queueStore.count > 0" text="Posters pending push to Plex">
+          <UButton
+            icon="i-lucide-upload-cloud"
+            variant="ghost"
+            color="neutral"
+            size="sm"
+            @click="queuePanelOpen = true"
+          >
             <UBadge :label="String(queueStore.count)" color="primary" size="xs" class="ml-1" />
-          </template>
-        </UButton>
-        <UButton
-          to="/settings"
-          icon="i-lucide-settings"
-          variant="ghost"
-          color="neutral"
-          size="sm"
-        />
+          </UButton>
+        </UTooltip>
+        <UTooltip text="Settings">
+          <UButton
+            to="/settings"
+            icon="i-lucide-settings"
+            variant="ghost"
+            color="neutral"
+            size="sm"
+          />
+        </UTooltip>
+        <UTooltip text="Help">
+          <UButton
+            icon="i-lucide-circle-help"
+            variant="ghost"
+            color="neutral"
+            size="sm"
+            @click="helpModalOpen = true"
+          />
+        </UTooltip>
       </div>
     </header>
 
     <!-- Content -->
     <div class="max-w-7xl mx-auto px-6 py-8">
       <!-- Empty state -->
-      <template v-if="!loading && media.length === 0">
+      <template v-if="!loading && mediaItems.length === 0">
         <div class="flex flex-col items-center justify-center py-32 gap-6 text-center">
           <div class="w-20 h-20 rounded-2xl bg-neutral-800 flex items-center justify-center">
             <UIcon name="i-lucide-film" class="w-10 h-10 text-neutral-600" />
@@ -332,6 +385,7 @@ async function onImported() {
         <!-- Search + Sort -->
         <div class="mb-6 flex flex-col sm:flex-row sm:items-center gap-3">
           <UInput
+            ref="searchInput"
             v-model="search"
             placeholder="Search media..."
             icon="i-lucide-search"
@@ -429,11 +483,13 @@ async function onImported() {
       @uploaded="onUploaded"
     />
     <ImportModal v-model:open="importModalOpen" @imported="onImported" />
+    <SyncCheckModal v-if="syncModalOpen" v-model:open="syncModalOpen" @synced="onSynced" />
+    <HelpModal v-model:open="helpModalOpen" />
     <QueuePanel
       v-model:open="queuePanelOpen"
       @restored="
         ({ ratingKey, thumb }) => {
-          const m = media.find((i) => i.ratingKey === ratingKey)
+          const m = mediaItems.find((i) => i.ratingKey === ratingKey)
           if (m) {
             m.thumb = thumb
             m.locallyModified = false

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue"
+import { readSSEStream } from "@/composables/useSSEStream"
 
 type PingStatus = "idle" | "loading" | "ok" | "error"
 type Phase = "selecting" | "importing" | "done"
@@ -122,31 +123,15 @@ async function startImport() {
     sectionKeys: enabledSectionsFor(type).map((l) => l.key),
   }))
 
-  const response = await fetch("/api/plex/import", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ targets }),
-  })
-
-  const reader = response.body!.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ""
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split("\n")
-    buffer = lines.pop() ?? ""
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue
-      try {
-        handleEvent(JSON.parse(line.slice(6)))
-      } catch {
-        // malformed event, ignore
-      }
-    }
-  }
+  await readSSEStream(
+    "/api/plex/import",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targets }),
+    },
+    handleEvent
+  )
 
   if (phase.value === "importing") phase.value = "done"
 }
@@ -261,7 +246,7 @@ function close() {
             class="w-5 h-5 text-primary-400 animate-spin shrink-0"
           />
           <span class="text-sm text-neutral-300">
-            Importing media…
+            Importing posters…
             <span class="text-neutral-500 ml-1">{{ progress.current }} / {{ progress.total }}</span>
           </span>
           <span class="ml-auto text-sm font-medium text-white">{{ progressPercent }}%</span>

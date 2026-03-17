@@ -84,7 +84,17 @@ describe("ChangePosterModal", () => {
       expect(screen.getByRole("button", { name: "Apply" })).not.toBeDisabled()
     })
 
-    it("Apply closes the modal", async () => {
+    it("Apply uploads from URL and closes the modal", async () => {
+      vi.mocked(fetch).mockImplementation((url) => {
+        if (typeof url === "string" && url.includes("upload-url")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ext: "jpg", thumb: "/api/media/1/thumb" }),
+          } as Response)
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) } as Response)
+      })
+
       const { emitted } = renderModal()
       await userEvent.click(screen.getByRole("tab", { name: "From URL" }))
       await userEvent.type(
