@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/florentsorel/postr/db"
+	"github.com/florentsorel/postr/internal/db"
 )
 
 func TestOpen_RunsMigrations(t *testing.T) {

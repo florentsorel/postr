@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	postrdb "github.com/florentsorel/postr/db"
+	postrdb "github.com/florentsorel/postr/internal/db"
 	"github.com/florentsorel/postr/internal/plex"
 	"github.com/labstack/echo/v5"
 )

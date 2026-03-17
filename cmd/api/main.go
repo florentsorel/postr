@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/florentsorel/postr/db"
+	"github.com/florentsorel/postr/internal/db"
 	"github.com/florentsorel/postr/internal/config"
 	"github.com/florentsorel/postr/internal/handler"
 	"github.com/florentsorel/postr/internal/plex"
