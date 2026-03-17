@@ -16,14 +16,15 @@ import (
 )
 
 type mediaResponse struct {
-	ID           int64  `json:"id"`
-	RatingKey    string `json:"ratingKey"`
-	Title        string `json:"title"`
-	Type         string `json:"type"`
-	Year         *int64 `json:"year,omitempty"`
-	SeasonNumber *int64 `json:"seasonNumber,omitempty"`
-	Thumb        string `json:"thumb,omitempty"`
-	AddedAt      *int64 `json:"addedAt,omitempty"`
+	ID              int64  `json:"id"`
+	RatingKey       string `json:"ratingKey"`
+	Title           string `json:"title"`
+	Type            string `json:"type"`
+	Year            *int64 `json:"year,omitempty"`
+	SeasonNumber    *int64 `json:"seasonNumber,omitempty"`
+	Thumb           string `json:"thumb,omitempty"`
+	LocallyModified bool   `json:"locallyModified"`
+	AddedAt         *int64 `json:"addedAt,omitempty"`
 }
 
 func (h *Handler) GetMediaThumb(c *echo.Context) error {
@@ -110,6 +111,13 @@ func (h *Handler) UploadMediaPoster(c *echo.Context) error {
 		Thumb:     sql.NullString{String: ext, Valid: true},
 		UpdatedAt: now,
 		RatingKey: ratingKey,
+	}); err != nil {
+		return jsonInternalError(c)
+	}
+	if err := h.db.SetLocallyModified(ctx, db.SetLocallyModifiedParams{
+		LocallyModified: 1,
+		UpdatedAt:       now,
+		RatingKey:       ratingKey,
 	}); err != nil {
 		return jsonInternalError(c)
 	}

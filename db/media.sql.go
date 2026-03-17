@@ -68,23 +68,24 @@ func (q *Queries) GetMediaByRatingKey(ctx context.Context, ratingKey string) (Ge
 }
 
 const listMedia = `-- name: ListMedia :many
-SELECT id, library_id, rating_key, title, type, year, season_number, thumb, added_at, created_at, updated_at
+SELECT id, library_id, rating_key, title, type, year, season_number, thumb, locally_modified, added_at, created_at, updated_at
 FROM media
 ORDER BY added_at DESC NULLS LAST
 `
 
 type ListMediaRow struct {
-	ID           int64
-	LibraryID    int64
-	RatingKey    string
-	Title        string
-	Type         string
-	Year         sql.NullInt64
-	SeasonNumber sql.NullInt64
-	Thumb        sql.NullString
-	AddedAt      sql.NullInt64
-	CreatedAt    int64
-	UpdatedAt    int64
+	ID              int64
+	LibraryID       int64
+	RatingKey       string
+	Title           string
+	Type            string
+	Year            sql.NullInt64
+	SeasonNumber    sql.NullInt64
+	Thumb           sql.NullString
+	LocallyModified int64
+	AddedAt         sql.NullInt64
+	CreatedAt       int64
+	UpdatedAt       int64
 }
 
 func (q *Queries) ListMedia(ctx context.Context) ([]ListMediaRow, error) {
@@ -105,6 +106,7 @@ func (q *Queries) ListMedia(ctx context.Context) ([]ListMediaRow, error) {
 			&i.Year,
 			&i.SeasonNumber,
 			&i.Thumb,
+			&i.LocallyModified,
 			&i.AddedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -152,6 +154,21 @@ func (q *Queries) ListRatingKeysByLibraryIDAndType(ctx context.Context, arg List
 		return nil, err
 	}
 	return items, nil
+}
+
+const setLocallyModified = `-- name: SetLocallyModified :exec
+UPDATE media SET locally_modified = ?, updated_at = ? WHERE rating_key = ?
+`
+
+type SetLocallyModifiedParams struct {
+	LocallyModified int64
+	UpdatedAt       int64
+	RatingKey       string
+}
+
+func (q *Queries) SetLocallyModified(ctx context.Context, arg SetLocallyModifiedParams) error {
+	_, err := q.db.ExecContext(ctx, setLocallyModified, arg.LocallyModified, arg.UpdatedAt, arg.RatingKey)
+	return err
 }
 
 const updateMediaThumb = `-- name: UpdateMediaThumb :exec
@@ -205,16 +222,17 @@ func (q *Queries) UpsertLibrary(ctx context.Context, arg UpsertLibraryParams) (L
 }
 
 const upsertMedia = `-- name: UpsertMedia :exec
-INSERT INTO media (library_id, rating_key, title, type, year, season_number, thumb, added_at, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO media (library_id, rating_key, title, type, year, season_number, thumb, locally_modified, added_at, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
 ON CONFLICT (rating_key) DO UPDATE SET
-    title         = excluded.title,
-    type          = excluded.type,
-    year          = excluded.year,
-    season_number = excluded.season_number,
-    thumb         = excluded.thumb,
-    added_at      = excluded.added_at,
-    updated_at    = excluded.updated_at
+    title            = excluded.title,
+    type             = excluded.type,
+    year             = excluded.year,
+    season_number    = excluded.season_number,
+    thumb            = excluded.thumb,
+    locally_modified = 0,
+    added_at         = excluded.added_at,
+    updated_at       = excluded.updated_at
 `
 
 type UpsertMediaParams struct {
