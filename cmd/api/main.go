@@ -92,6 +92,7 @@ func main() {
 	api.POST("/libraries", h.SaveLibraries)
 
 	api.GET("/media", h.GetMedia)
+	api.DELETE("/media/:ratingKey", h.DeleteOrphan)
 	api.GET("/media/:ratingKey/thumb", h.GetMediaThumb)
 	api.POST("/media/:ratingKey/upload", h.UploadMediaPoster)
 	api.POST("/media/:ratingKey/upload-url", h.UploadPosterFromURL)

@@ -13,6 +13,7 @@ import (
 )
 
 var ErrUnauthorized = errors.New("invalid Plex token")
+var ErrNotFound = errors.New("media not found in Plex")
 
 type Client struct {
 	baseURL    string
@@ -47,6 +48,9 @@ func (c *Client) DownloadThumb(ctx context.Context, thumbPath string) ([]byte, s
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, "", ErrUnauthorized
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, "", ErrNotFound
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, "", fmt.Errorf("plex returned %d for thumb %s", resp.StatusCode, thumbPath)
@@ -107,6 +111,9 @@ func (c *Client) UploadPoster(ctx context.Context, ratingKey string, data []byte
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return ErrUnauthorized
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrNotFound
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("plex returned %d when uploading poster for %s", resp.StatusCode, ratingKey)

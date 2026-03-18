@@ -17,21 +17,25 @@ ON CONFLICT (rating_key) DO UPDATE SET
     season_number    = excluded.season_number,
     thumb            = excluded.thumb,
     locally_modified = 0,
+    is_orphan        = 0,
     added_at         = excluded.added_at,
     updated_at       = excluded.updated_at;
 
 -- name: ListMedia :many
-SELECT id, library_id, rating_key, title, type, year, season_number, thumb, locally_modified, added_at, created_at, updated_at
+SELECT id, library_id, rating_key, title, type, year, season_number, thumb, locally_modified, is_orphan, added_at, created_at, updated_at
 FROM media
 ORDER BY added_at DESC NULLS LAST;
 
 -- name: GetMediaByRatingKey :one
-SELECT id, library_id, rating_key, title, type, year, season_number, thumb, added_at, created_at, updated_at
+SELECT id, library_id, rating_key, title, type, year, season_number, thumb, locally_modified, is_orphan, added_at, created_at, updated_at
 FROM media
 WHERE rating_key = ?;
 
 -- name: ListRatingKeysByLibraryIDAndType :many
-SELECT rating_key FROM media WHERE library_id = ? AND type = ?;
+SELECT rating_key FROM media WHERE library_id = ? AND type = ? AND is_orphan = 0;
+
+-- name: MarkOrphan :exec
+UPDATE media SET is_orphan = 1, updated_at = ? WHERE rating_key = ?;
 
 -- name: DeleteMediaByRatingKey :exec
 DELETE FROM media WHERE rating_key = ?;

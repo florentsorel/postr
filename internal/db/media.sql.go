@@ -29,23 +29,25 @@ func (q *Queries) DeleteMediaByRatingKey(ctx context.Context, ratingKey string) 
 }
 
 const getMediaByRatingKey = `-- name: GetMediaByRatingKey :one
-SELECT id, library_id, rating_key, title, type, year, season_number, thumb, added_at, created_at, updated_at
+SELECT id, library_id, rating_key, title, type, year, season_number, thumb, locally_modified, is_orphan, added_at, created_at, updated_at
 FROM media
 WHERE rating_key = ?
 `
 
 type GetMediaByRatingKeyRow struct {
-	ID           int64
-	LibraryID    int64
-	RatingKey    string
-	Title        string
-	Type         string
-	Year         sql.NullInt64
-	SeasonNumber sql.NullInt64
-	Thumb        sql.NullString
-	AddedAt      sql.NullInt64
-	CreatedAt    int64
-	UpdatedAt    int64
+	ID              int64
+	LibraryID       int64
+	RatingKey       string
+	Title           string
+	Type            string
+	Year            sql.NullInt64
+	SeasonNumber    sql.NullInt64
+	Thumb           sql.NullString
+	LocallyModified int64
+	IsOrphan        int64
+	AddedAt         sql.NullInt64
+	CreatedAt       int64
+	UpdatedAt       int64
 }
 
 func (q *Queries) GetMediaByRatingKey(ctx context.Context, ratingKey string) (GetMediaByRatingKeyRow, error) {
@@ -60,6 +62,8 @@ func (q *Queries) GetMediaByRatingKey(ctx context.Context, ratingKey string) (Ge
 		&i.Year,
 		&i.SeasonNumber,
 		&i.Thumb,
+		&i.LocallyModified,
+		&i.IsOrphan,
 		&i.AddedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -68,7 +72,7 @@ func (q *Queries) GetMediaByRatingKey(ctx context.Context, ratingKey string) (Ge
 }
 
 const listMedia = `-- name: ListMedia :many
-SELECT id, library_id, rating_key, title, type, year, season_number, thumb, locally_modified, added_at, created_at, updated_at
+SELECT id, library_id, rating_key, title, type, year, season_number, thumb, locally_modified, is_orphan, added_at, created_at, updated_at
 FROM media
 ORDER BY added_at DESC NULLS LAST
 `
@@ -83,6 +87,7 @@ type ListMediaRow struct {
 	SeasonNumber    sql.NullInt64
 	Thumb           sql.NullString
 	LocallyModified int64
+	IsOrphan        int64
 	AddedAt         sql.NullInt64
 	CreatedAt       int64
 	UpdatedAt       int64
@@ -107,6 +112,7 @@ func (q *Queries) ListMedia(ctx context.Context) ([]ListMediaRow, error) {
 			&i.SeasonNumber,
 			&i.Thumb,
 			&i.LocallyModified,
+			&i.IsOrphan,
 			&i.AddedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -125,7 +131,7 @@ func (q *Queries) ListMedia(ctx context.Context) ([]ListMediaRow, error) {
 }
 
 const listRatingKeysByLibraryIDAndType = `-- name: ListRatingKeysByLibraryIDAndType :many
-SELECT rating_key FROM media WHERE library_id = ? AND type = ?
+SELECT rating_key FROM media WHERE library_id = ? AND type = ? AND is_orphan = 0
 `
 
 type ListRatingKeysByLibraryIDAndTypeParams struct {
@@ -154,6 +160,20 @@ func (q *Queries) ListRatingKeysByLibraryIDAndType(ctx context.Context, arg List
 		return nil, err
 	}
 	return items, nil
+}
+
+const markOrphan = `-- name: MarkOrphan :exec
+UPDATE media SET is_orphan = 1, updated_at = ? WHERE rating_key = ?
+`
+
+type MarkOrphanParams struct {
+	UpdatedAt int64
+	RatingKey string
+}
+
+func (q *Queries) MarkOrphan(ctx context.Context, arg MarkOrphanParams) error {
+	_, err := q.db.ExecContext(ctx, markOrphan, arg.UpdatedAt, arg.RatingKey)
+	return err
 }
 
 const setLocallyModified = `-- name: SetLocallyModified :exec
@@ -231,6 +251,7 @@ ON CONFLICT (rating_key) DO UPDATE SET
     season_number    = excluded.season_number,
     thumb            = excluded.thumb,
     locally_modified = 0,
+    is_orphan        = 0,
     added_at         = excluded.added_at,
     updated_at       = excluded.updated_at
 `

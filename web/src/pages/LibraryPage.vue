@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue"
+import { ref, computed, watch, onMounted } from "vue"
 import type { DropdownMenuItem } from "@nuxt/ui"
 import { useRoute, useRouter } from "vue-router"
 import { useToast } from "@nuxt/ui/composables/useToast"
@@ -14,19 +14,20 @@ import { useLibraryUiStore } from "@/stores/useLibraryUiStore"
 import { useQueueStore } from "@/stores/useQueueStore"
 import { useAuthStore } from "@/stores/useAuthStore"
 
-type MediaType = "all" | "movie" | "show" | "season" | "collection"
+type MediaType = "all" | "movie" | "show" | "season" | "collection" | "orphan"
 type SortKey = "title" | "year" | "added"
 
 interface MediaItem {
   id: number
   ratingKey: string
   title: string
-  type: Exclude<MediaType, "all">
+  type: Exclude<MediaType, "all" | "orphan">
   year?: number
   seasonNumber?: number
   thumb?: string
   addedAt?: number
   locallyModified: boolean
+  isOrphan: boolean
 }
 
 const route = useRoute()
@@ -40,7 +41,7 @@ async function logout() {
   router.push("/login")
 }
 
-const VALID_TABS: MediaType[] = ["all", "movie", "show", "season", "collection"]
+const VALID_TABS: MediaType[] = ["all", "movie", "show", "season", "collection", "orphan"]
 const VALID_SORTS: SortKey[] = ["title", "year", "added"]
 
 function parseTab(v: unknown): MediaType {
@@ -115,7 +116,7 @@ const menuItems = computed<DropdownMenuItem[][]>(() => {
       },
     },
   ]
-  if (plexConfigured.value && mediaItems.value.length > 0) {
+  if (plexConfigured.value && activeItems.value.length > 0) {
     items.push({
       label: "Sync from Plex",
       icon: "i-lucide-scan-search",
@@ -188,8 +189,18 @@ const toast = useToast()
 
 async function sendToPlex(item: MediaItem) {
   try {
-    await queueStore.pushOne(item.ratingKey)
-    item.locallyModified = false
+    const { orphaned } = await queueStore.pushOne(item.ratingKey)
+    if (orphaned) {
+      item.isOrphan = true
+      toast.add({
+        title: "Media not found in Plex",
+        description: "This item no longer exists in Plex and has been moved to the Orphaned tab.",
+        color: "warning",
+        icon: "i-lucide-unlink",
+      })
+    } else {
+      item.locallyModified = false
+    }
   } catch (e) {
     toast.add({
       title: "Failed to push to Plex",
@@ -201,11 +212,47 @@ async function sendToPlex(item: MediaItem) {
 }
 
 async function getFromPlex(item: MediaItem) {
-  const thumb = await queueStore.removeItem(item.ratingKey)
-  const found = mediaItems.value.find((m) => m.ratingKey === item.ratingKey)
-  if (found) {
-    if (thumb) found.thumb = thumb
-    found.locallyModified = false
+  try {
+    const { thumb, warning, orphaned } = await queueStore.removeItem(item.ratingKey)
+    const found = mediaItems.value.find((m) => m.ratingKey === item.ratingKey)
+    if (found) {
+      if (orphaned) {
+        found.isOrphan = true
+        toast.add({
+          title: "Media not found in Plex",
+          description: "This item no longer exists in Plex and has been moved to the Orphaned tab.",
+          color: "warning",
+          icon: "i-lucide-unlink",
+        })
+      } else {
+        if (thumb) found.thumb = thumb
+        found.locallyModified = false
+        if (warning) {
+          toast.add({
+            title: "Could not restore Plex poster",
+            description: warning,
+            color: "warning",
+            icon: "i-lucide-alert-triangle",
+          })
+        }
+      }
+    }
+  } catch (e) {
+    toast.add({
+      title: "Could not restore Plex poster",
+      description: e instanceof Error ? e.message : undefined,
+      color: "error",
+      icon: "i-lucide-circle-x",
+    })
+  }
+}
+
+async function deleteOrphan(item: MediaItem) {
+  const res = await fetch(`/api/media/${item.ratingKey}`, { method: "DELETE" })
+  if (res.ok) {
+    mediaItems.value = mediaItems.value.filter((m) => m.ratingKey !== item.ratingKey)
+  } else {
+    toast.add({ title: "Failed to delete orphan", color: "error", icon: "i-lucide-circle-x" })
   }
 }
 
@@ -235,16 +282,28 @@ function onUploaded(payload: { ratingKey: string; thumb: string }) {
   }
 }
 
-// Will be replaced by real API data
 const mediaItems = ref<MediaItem[]>([])
 
-const tabs = [
-  { label: "All", value: "all" },
-  { label: "Movies", value: "movie" },
-  { label: "TV Series", value: "show" },
-  { label: "Seasons", value: "season" },
-  { label: "Collections", value: "collection" },
-]
+const activeItems = computed(() => mediaItems.value.filter((m) => !m.isOrphan))
+const orphanItems = computed(() => mediaItems.value.filter((m) => m.isOrphan))
+
+watch(orphanItems, (items) => {
+  if (items.length === 0 && activeTab.value === "orphan") activeTab.value = "all"
+})
+
+const tabs = computed(() => {
+  const base = [
+    { label: "All", value: "all" },
+    { label: "Movies", value: "movie" },
+    { label: "TV Series", value: "show" },
+    { label: "Seasons", value: "season" },
+    { label: "Collections", value: "collection" },
+  ]
+  if (orphanItems.value.length > 0) {
+    base.push({ label: `Orphaned (${orphanItems.value.length})`, value: "orphan" })
+  }
+  return base
+})
 
 const search = ref("")
 const searchInput = ref<{ inputRef: HTMLInputElement } | null>(null)
@@ -261,7 +320,7 @@ const sortOptions = computed(() =>
 )
 
 // For title sort: collections surface first when title is identical
-const titleTypeOrder: Record<Exclude<MediaType, "all">, number> = {
+const titleTypeOrder: Record<Exclude<MediaType, "all" | "orphan">, number> = {
   collection: 0,
   movie: 1,
   show: 2,
@@ -269,10 +328,17 @@ const titleTypeOrder: Record<Exclude<MediaType, "all">, number> = {
 }
 
 const filtered = computed(() => {
+  if (activeTab.value === "orphan") {
+    const s = search.value.trim().toLowerCase()
+    return s
+      ? orphanItems.value.filter((m) => m.title.toLowerCase().includes(s))
+      : orphanItems.value
+  }
+
   const byTab =
     activeTab.value === "all"
-      ? mediaItems.value
-      : mediaItems.value.filter((m) => m.type === activeTab.value)
+      ? activeItems.value
+      : activeItems.value.filter((m) => m.type === activeTab.value)
 
   const searched = search.value.trim()
     ? byTab.filter((m) => m.title.toLowerCase().includes(search.value.toLowerCase().trim()))
@@ -308,7 +374,7 @@ const paginated = computed(() => {
   return filtered.value.slice(start, start + PER_PAGE)
 })
 
-const TYPE_LABEL: Record<Exclude<MediaType, "all">, string> = {
+const TYPE_LABEL: Record<Exclude<MediaType, "all" | "orphan">, string> = {
   movie: "Movie",
   show: "TV Series",
   season: "Season",
@@ -316,7 +382,7 @@ const TYPE_LABEL: Record<Exclude<MediaType, "all">, string> = {
 }
 
 const activeTabLabel = computed(
-  () => TYPE_LABEL[activeTab.value as Exclude<MediaType, "all">] ?? "items"
+  () => TYPE_LABEL[activeTab.value as Exclude<MediaType, "all" | "orphan">] ?? "items"
 )
 
 async function onImported() {
@@ -332,6 +398,13 @@ function onSynced(items: Array<{ ratingKey: string; updatedAt: number }>) {
       m.thumb = `/api/media/${changed.ratingKey}/thumb?v=${changed.updatedAt}`
       m.locallyModified = false
     }
+  }
+}
+
+function onSyncOrphaned(ratingKeys: string[]) {
+  for (const ratingKey of ratingKeys) {
+    const m = mediaItems.value.find((i) => i.ratingKey === ratingKey)
+    if (m) m.isOrphan = true
   }
 }
 </script>
@@ -366,7 +439,7 @@ function onSynced(items: Array<{ ratingKey: string; updatedAt: number }>) {
           </UButton>
         </UTooltip>
         <UTooltip
-          v-if="plexConfigured && mediaItems.length > 0"
+          v-if="plexConfigured && activeItems.length > 0"
           text="Detect poster changes made directly in Plex"
         >
           <UButton
@@ -423,7 +496,7 @@ function onSynced(items: Array<{ ratingKey: string; updatedAt: number }>) {
     <!-- Content -->
     <div class="max-w-7xl mx-auto px-6 py-8">
       <!-- Empty state -->
-      <template v-if="!loading && mediaItems.length === 0">
+      <template v-if="!loading && activeItems.length === 0 && orphanItems.length === 0">
         <div class="flex flex-col items-center justify-center py-32 gap-6 text-center">
           <div class="w-20 h-20 rounded-2xl bg-neutral-800 flex items-center justify-center">
             <UIcon name="i-lucide-film" class="w-10 h-10 text-neutral-600" />
@@ -470,6 +543,7 @@ function onSynced(items: Array<{ ratingKey: string; updatedAt: number }>) {
             </template>
           </UInput>
           <USelect
+            v-if="activeTab !== 'orphan'"
             v-model="sort"
             :items="sortOptions"
             size="lg"
@@ -533,9 +607,11 @@ function onSynced(items: Array<{ ratingKey: string; updatedAt: number }>) {
             :pulling="queueStore.isPulling(item.ratingKey)"
             :in-queue="queueStore.items.some((q) => q.ratingKey === item.ratingKey)"
             :locally-modified="item.locallyModified"
+            :is-orphan="item.isOrphan"
             @change-poster="openPosterModal(item)"
             @send-to-plex="sendToPlex(item)"
             @get-from-plex="getFromPlex(item)"
+            @delete-orphan="deleteOrphan(item)"
           />
         </div>
 
@@ -568,7 +644,12 @@ function onSynced(items: Array<{ ratingKey: string; updatedAt: number }>) {
       @uploaded="onUploaded"
     />
     <ImportModal v-model:open="importModalOpen" @imported="onImported" />
-    <SyncCheckModal v-if="syncModalOpen" v-model:open="syncModalOpen" @synced="onSynced" />
+    <SyncCheckModal
+      v-if="syncModalOpen"
+      v-model:open="syncModalOpen"
+      @synced="onSynced"
+      @orphaned="onSyncOrphaned"
+    />
     <HelpModal v-model:open="helpModalOpen" />
     <QueuePanel
       v-model:open="queuePanelOpen"
@@ -576,7 +657,7 @@ function onSynced(items: Array<{ ratingKey: string; updatedAt: number }>) {
         ({ ratingKey, thumb }) => {
           const m = mediaItems.find((i) => i.ratingKey === ratingKey)
           if (m) {
-            m.thumb = thumb
+            if (thumb) m.thumb = thumb
             m.locallyModified = false
           }
         }

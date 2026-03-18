@@ -24,7 +24,7 @@ func TestOpen_RunsMigrations(t *testing.T) {
 		"tmdb":         "false",
 		"tvdb":         "false",
 		"fanart":       "false",
-		"auto_resize":  "true",
+		"auto_resize":  "false",
 		"resize_width": "1000",
 	}
 

@@ -51,7 +51,7 @@ func TestGetSettings(t *testing.T) {
 		}
 	})
 
-	t.Run("auto_resize defaults to true", func(t *testing.T) {
+	t.Run("auto_resize defaults to false", func(t *testing.T) {
 		setup := newTestSetup(t, nil)
 		rec, c := newCtx(t, http.MethodGet, "/api/settings", "")
 
@@ -62,8 +62,29 @@ func TestGetSettings(t *testing.T) {
 			AutoResize bool `json:"auto_resize"`
 		}
 		resp := decodeJSON[settingsResp](t, rec.Body.Bytes())
+		if resp.AutoResize {
+			t.Error("auto_resize: want false (default)")
+		}
+	})
+
+	t.Run("auto_resize returns true after update", func(t *testing.T) {
+		setup := newTestSetup(t, nil)
+
+		_, saveCtx := newCtx(t, http.MethodPost, "/api/settings", `{"sources":[],"options":{"autoResize":true}}`)
+		if err := setup.handler.SaveSettings(saveCtx); err != nil {
+			t.Fatalf("SaveSettings: %v", err)
+		}
+
+		rec, c := newCtx(t, http.MethodGet, "/api/settings", "")
+		if err := setup.handler.GetSettings(c); err != nil {
+			t.Fatalf("GetSettings: %v", err)
+		}
+		type settingsResp struct {
+			AutoResize bool `json:"auto_resize"`
+		}
+		resp := decodeJSON[settingsResp](t, rec.Body.Bytes())
 		if !resp.AutoResize {
-			t.Error("auto_resize: want true (default)")
+			t.Error("auto_resize: want true after update")
 		}
 	})
 }

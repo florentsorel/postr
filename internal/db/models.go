@@ -31,6 +31,7 @@ type Medium struct {
 	Year            sql.NullInt64
 	Thumb           sql.NullString
 	LocallyModified int64
+	IsOrphan        int64
 	AddedAt         sql.NullInt64
 	CreatedAt       int64
 	UpdatedAt       int64

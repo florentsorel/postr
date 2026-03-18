@@ -17,6 +17,7 @@ CREATE TABLE media (
     year          INTEGER,
     thumb            TEXT,
     locally_modified INTEGER NOT NULL DEFAULT 0,
+    is_orphan        INTEGER NOT NULL DEFAULT 0,
     added_at         INTEGER,
     created_at       INTEGER NOT NULL,
     updated_at       INTEGER NOT NULL
