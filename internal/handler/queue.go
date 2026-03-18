@@ -3,7 +3,7 @@ package handler
 import (
 	"database/sql"
 	"errors"
-
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -110,11 +110,23 @@ func (h *Handler) PushPoster(c *echo.Context) error {
 		return jsonError(c, http.StatusNotFound, "poster file not found")
 	}
 
+	slog.Info("pushing poster to Plex", "type", m.Type, "title", m.Title, "ratingKey", ratingKey)
 	if err := h.plex.UploadPoster(ctx, ratingKey, data, plex.ContentTypeFromExt(ext)); err != nil {
+		slog.Error("failed to push poster to Plex", "title", m.Title, "ratingKey", ratingKey, "error", err)
 		return jsonError(c, http.StatusBadGateway, "failed to push to Plex: "+err.Error())
 	}
+	slog.Info("poster pushed to Plex", "type", m.Type, "title", m.Title)
 
 	if err := h.db.DeletePosterQueueByRatingKey(ctx, ratingKey); err != nil {
+		return jsonInternalError(c)
+	}
+
+	now := time.Now().Unix()
+	if err := h.db.SetLocallyModified(ctx, db.SetLocallyModifiedParams{
+		LocallyModified: 0,
+		UpdatedAt:       now,
+		RatingKey:       ratingKey,
+	}); err != nil {
 		return jsonInternalError(c)
 	}
 
@@ -176,6 +188,14 @@ func (h *Handler) PushAllPosters(c *echo.Context) error {
 				mu.Unlock()
 				return
 			}
+
+			now := time.Now().Unix()
+			_ = h.db.SetLocallyModified(ctx, db.SetLocallyModifiedParams{
+				LocallyModified: 0,
+				UpdatedAt:       now,
+				RatingKey:       ratingKey,
+			})
+
 			mu.Lock()
 			results[i] = result{RatingKey: ratingKey}
 			mu.Unlock()

@@ -34,6 +34,10 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    outDir: "../internal/web/dist",
+    emptyOutDir: true,
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

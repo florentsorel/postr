@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -46,7 +47,6 @@ func (h *Handler) SyncFromPlex(c *echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
-	log := c.Logger()
 
 	media, err := h.db.ListMedia(ctx)
 	if err != nil {
@@ -62,6 +62,7 @@ func (h *Handler) SyncFromPlex(c *echo.Context) error {
 		}
 	}
 
+	slog.Info("sync started", "checking", len(toCheck))
 	send(sseStartEvent{Type: "start", Total: len(toCheck)})
 
 	var changed int
@@ -73,7 +74,7 @@ func (h *Handler) SyncFromPlex(c *echo.Context) error {
 			continue
 		}
 		if saveErr != nil {
-			log.Warn("sync: failed to download thumb", "ratingKey", m.RatingKey, "error", saveErr)
+			slog.Warn("sync: failed to download thumb", "title", m.Title, "ratingKey", m.RatingKey, "error", saveErr)
 			send(sseProgressEvent{Type: "progress", Current: i + 1, Total: len(toCheck)})
 			continue
 		}
@@ -84,9 +85,10 @@ func (h *Handler) SyncFromPlex(c *echo.Context) error {
 			UpdatedAt: now,
 			RatingKey: m.RatingKey,
 		}); err != nil {
-			log.Warn("sync: failed to update thumb in DB", "ratingKey", m.RatingKey, "error", err)
+			slog.Warn("sync: failed to update thumb in DB", "title", m.Title, "ratingKey", m.RatingKey, "error", err)
 		}
 
+		slog.Info("sync: poster updated", "type", m.Type, "title", m.Title)
 		changed++
 		event := sseSyncChangedEvent{
 			Type:      "changed",
@@ -102,6 +104,7 @@ func (h *Handler) SyncFromPlex(c *echo.Context) error {
 		send(sseProgressEvent{Type: "progress", Current: i + 1, Total: len(toCheck)})
 	}
 
+	slog.Info("sync done", "changed", changed, "checked", len(toCheck))
 	send(sseSyncDoneEvent{Type: "done", Changed: changed, Checked: len(toCheck)})
 	return nil
 }
