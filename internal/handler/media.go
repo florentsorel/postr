@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -37,7 +38,7 @@ func (h *Handler) GetMediaThumb(c *echo.Context) error {
 		if errors.Is(err, sql.ErrNoRows) {
 			return jsonError(c, http.StatusNotFound, "media not found")
 		}
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
 	ext := "jpg"
@@ -106,7 +107,7 @@ func (h *Handler) UploadMediaPoster(c *echo.Context) error {
 		if errors.Is(err, sql.ErrNoRows) {
 			return jsonError(c, http.StatusNotFound, "media not found")
 		}
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
 	file, err := c.FormFile("file")
@@ -116,20 +117,21 @@ func (h *Handler) UploadMediaPoster(c *echo.Context) error {
 
 	src, err := file.Open()
 	if err != nil {
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 	defer src.Close()
 
 	data, err := io.ReadAll(src)
 	if err != nil {
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
 	ext := extFromFilename(file.Filename)
 	if err := h.storePoster(ctx, m, ratingKey, ext, data); err != nil {
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
+	slog.Info("poster uploaded", "type", m.Type, "title", m.Title, "ratingKey", ratingKey, "source", "file")
 	return c.JSON(http.StatusOK, map[string]string{"ext": ext, "thumb": "/api/media/" + ratingKey + "/thumb"})
 }
 
@@ -155,7 +157,7 @@ func (h *Handler) UploadPosterFromURL(c *echo.Context) error {
 		if errors.Is(err, sql.ErrNoRows) {
 			return jsonError(c, http.StatusNotFound, "media not found")
 		}
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
 	var body struct {
@@ -181,7 +183,7 @@ func (h *Handler) UploadPosterFromURL(c *echo.Context) error {
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
 	ext := extFromContentType(resp.Header.Get("Content-Type"))
@@ -190,16 +192,17 @@ func (h *Handler) UploadPosterFromURL(c *echo.Context) error {
 	}
 
 	if err := h.storePoster(ctx, m, ratingKey, ext, data); err != nil {
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
+	slog.Info("poster uploaded", "type", m.Type, "title", m.Title, "ratingKey", ratingKey, "source", "url")
 	return c.JSON(http.StatusOK, map[string]string{"ext": ext, "thumb": "/api/media/" + ratingKey + "/thumb"})
 }
 
 func (h *Handler) GetMedia(c *echo.Context) error {
 	rows, err := h.db.ListMedia(c.Request().Context())
 	if err != nil {
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
 	items := make([]mediaResponse, 0, len(rows))
@@ -240,16 +243,17 @@ func (h *Handler) DeleteOrphan(c *echo.Context) error {
 		if errors.Is(err, sql.ErrNoRows) {
 			return jsonError(c, http.StatusNotFound, "media not found")
 		}
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
 	if err := h.db.DeleteMediaByRatingKey(ctx, ratingKey); err != nil {
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
 	for _, ext := range []string{"jpg", "png", "webp"} {
 		_ = os.Remove(filepath.Join(h.config.DataPath, "posters", m.Type, ratingKey+"."+ext))
 	}
 
+	slog.Info("orphan deleted", "type", m.Type, "title", m.Title, "ratingKey", ratingKey)
 	return c.NoContent(http.StatusNoContent)
 }

@@ -49,9 +49,14 @@ Postr allows users to browse their Plex library and replace poster images for mo
 ### 2. Sync from Plex
 
 - Checks whether posters have been updated directly in Plex since the last import.
-- Only checks items that have **not** been locally modified by the user (`locally_modified = 0`).
+- Only checks items that have **not** been locally modified (`locally_modified = 0`) and are **not orphans** (`is_orphan = 0`).
 - Compares each local poster byte-for-byte with the current Plex poster. Updates any that have changed.
-- Streams real-time progress via SSE. Displays a progress bar while checking, then lists updated items on completion.
+- Streams real-time progress via SSE. Displays a progress bar while checking, then shows a recap on completion:
+  - **Updated** items listed with a badge.
+  - **Failed** items listed separately with the reason (e.g. "No longer exists in Plex").
+- Items that return 404 from Plex are automatically **marked as orphans** (see Orphaned Items below).
+- "All posters are up to date" message only shown when there are zero changes and zero failures.
+- Plex connectivity is checked (ping) on modal open — sync button disabled if unreachable or token invalid.
 - Does not add or remove items — only updates existing posters.
 - Button only visible when at least one item has been imported.
 
@@ -68,19 +73,32 @@ Each media card exposes actions on hover:
 **b) Send to Plex**
 - Pushes the locally modified poster directly to Plex.
 - Only visible on cards that have a pending change (item is in the queue).
+- Pings Plex first: config errors (bad URL/token) show a specific toast and keep the item in the queue. If Plex returns 404, the item is marked as orphan.
 
 **c) Get from Plex**
 - Re-downloads the poster currently set in Plex and overwrites the local copy.
 - Only visible on cards where the local poster has been locally modified (differs from Plex).
+- Pings Plex first: config errors return an error toast and keep the item in the queue. If Plex returns 404, the item is marked as orphan.
 
 ### 4. Queue
 
 - Lists all posters modified locally that are pending push to Plex.
 - Push one at a time or all at once with "Push all to Plex".
-- Removing an item from the queue restores the original Plex poster.
+- Removing an item from the queue restores the original Plex poster (pings Plex first — config errors keep the item in the queue).
 - Button only visible when there are pending items.
 
-### 5. Settings
+### 5. Orphaned Items
+
+- An item becomes an **orphan** (`is_orphan = 1`) when it is no longer found in Plex (HTTP 404) during: import, sync, Send to Plex, or Get from Plex.
+- Orphans are **not** created for connectivity/token errors — only confirmed 404s.
+- Orphaned items appear in a dedicated **Orphaned** tab (only visible when at least one orphan exists).
+- The tab auto-disappears and the view switches back to "All" when the last orphan is deleted.
+- A toast is shown immediately when an item becomes orphan after a user action.
+- Orphaned items can be permanently deleted via a trash icon on the card.
+- On re-import, if an orphaned item reappears in Plex (same `ratingKey`), `is_orphan` is reset to `0` automatically by the upsert.
+- Note: Plex assigns new `ratingKey`s when an item is deleted and re-added — the old orphan record will remain until manually deleted.
+
+### 6. Settings
 
 Two categories of settings:
 
@@ -96,7 +114,7 @@ The backend exposes `GET /api/settings` which returns both env-based config (rea
 
 `PLEX_URL` is normalized at startup: scheme defaults to `http://` if omitted, trailing slashes and paths are stripped. Invalid schemes (non http/https) cause a startup error.
 
-### 6. Authentication (Optional)
+### 7. Authentication (Optional)
 
 - A login form protects the app for users who expose it to the public internet.
 - All auth credentials are configured exclusively via environment variables — no database storage.
@@ -109,13 +127,14 @@ The backend exposes `GET /api/settings` which returns both env-based config (rea
 - Media library is displayed in a **responsive grid layout** after import (2→3→4→5→6 columns).
 - Each card shows the locally stored poster thumbnail, title, type badge, and year.
 - On hover: **Change Poster**, **Send to Plex** (if queued), and **Get from Plex** (if locally modified) action buttons appear.
-- Tabs filter by type: All / Movies / TV Series / Seasons / Collections.
-- Sort options: Title (A–Z), Year, Recently Added (`addedAt` from Plex, stored in SQLite).
-- Search bar filters by title in real time across **all items** (not scoped to the current page).
+- Tabs filter by type: All / Movies / TV Series / Seasons / Collections / Orphaned (conditional).
+- Sort options: Title (A–Z), Year, Recently Added (`addedAt` from Plex, stored in SQLite). Sort is hidden on the Orphaned tab.
+- Search bar filters by title in real time across **all items** (not scoped to the current page), including on the Orphaned tab.
 - Tab, sort, and page are reflected in the URL as query params (`?tab=movie&sort=year&page=2`). The search is local-only (not in the URL).
 - Keyboard shortcuts: `?` toggles the help modal, `⌘K` / `Ctrl+K` focuses the search bar.
 - Help modal documents all features with per-button visibility rules.
 - Header buttons are conditionally visible: Import/Sync require Plex configured, Sync requires items imported, Queue requires pending items.
+- Import and Sync modals ping Plex on open to show connectivity errors before the user can proceed.
 - Error layout (502) shown when backend is unreachable.
 - `KeepAlive` on RouterView avoids skeleton flash when navigating back from Settings.
 - The interface feels clean and media-focused — dark theme with Plex yellow (`#E5A00D`) as primary color.
@@ -167,6 +186,7 @@ The application is packaged as a single Docker image containing both the Go back
 | `GET`    | `/api/libraries`                   | List Plex libraries with enabled state from DB     |
 | `POST`   | `/api/libraries`                   | Save per-library enabled/disabled state            |
 | `GET`    | `/api/media`                       | List imported media items                          |
+| `DELETE` | `/api/media/:ratingKey`            | Delete an orphaned media item                      |
 | `GET`    | `/api/media/:ratingKey/thumb`      | Serve locally stored poster for a media item       |
 | `POST`   | `/api/media/:ratingKey/upload`     | Upload a poster file (multipart)                   |
 | `POST`   | `/api/media/:ratingKey/upload-url` | Fetch and store a poster from a URL (server-side)  |

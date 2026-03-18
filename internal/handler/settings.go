@@ -2,6 +2,7 @@ package handler
 
 import (
 	"database/sql"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -37,7 +38,7 @@ var sourceMeta = map[string]struct{ label, description string }{
 func (h *Handler) GetSettings(c *echo.Context) error {
 	settings, err := h.db.ListSettings(c.Request().Context())
 	if err != nil {
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
 	resp := settingsResponse{
@@ -115,7 +116,7 @@ func (h *Handler) SaveSettings(c *echo.Context) error {
 			Position: sql.NullInt64{Int64: int64(i), Valid: true},
 			Key:      s.ID,
 		}); err != nil {
-			return jsonInternalError(c)
+			return jsonInternalError(c, err)
 		}
 	}
 
@@ -128,7 +129,7 @@ func (h *Handler) SaveSettings(c *echo.Context) error {
 		Type:  "option",
 		Key:   "auto_resize",
 	}); err != nil {
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
 	resizeWidth := req.Options.ResizeWidth
@@ -140,8 +141,9 @@ func (h *Handler) SaveSettings(c *echo.Context) error {
 		Type:  "option",
 		Key:   "resize_width",
 	}); err != nil {
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
+	slog.Info("settings saved", "autoResize", req.Options.AutoResize, "resizeWidth", req.Options.ResizeWidth)
 	return c.NoContent(http.StatusNoContent)
 }

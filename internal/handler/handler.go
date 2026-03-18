@@ -2,10 +2,11 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
-	"github.com/florentsorel/postr/internal/db"
 	"github.com/florentsorel/postr/internal/config"
+	"github.com/florentsorel/postr/internal/db"
 	"github.com/florentsorel/postr/internal/plex"
 	"github.com/labstack/echo/v5"
 )
@@ -39,6 +40,7 @@ func jsonError(c *echo.Context, status int, msg string) error {
 	return c.JSON(status, errorResponse{Error: msg})
 }
 
-func jsonInternalError(c *echo.Context) error {
+func jsonInternalError(c *echo.Context, err error) error {
+	slog.Error("internal server error", "error", err, "path", c.Request().URL.Path)
 	return jsonError(c, http.StatusInternalServerError, "internal server error")
 }

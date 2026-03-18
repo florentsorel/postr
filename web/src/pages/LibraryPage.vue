@@ -413,7 +413,9 @@ function onSyncOrphaned(ratingKeys: string[]) {
   <ErrorLayout v-if="backendError" :code="502" message="The backend is unreachable." />
   <div v-else class="min-h-screen bg-[#1f1f1f] text-white">
     <!-- Header -->
-    <header class="border-b border-neutral-800 px-6 py-4 flex items-center gap-4">
+    <header
+      class="border-b border-neutral-800 px-6 py-4 flex items-center gap-4 sm:sticky sm:top-0 sm:z-10 bg-[#1f1f1f]"
+    >
       <div class="flex items-center gap-2">
         <div class="w-7 h-7 rounded-lg bg-primary-500 flex items-center justify-center">
           <UIcon name="i-lucide-image" class="w-4 h-4 text-white" />
