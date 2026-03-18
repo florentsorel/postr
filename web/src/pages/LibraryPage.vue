@@ -12,6 +12,7 @@ import HelpModal from "../components/HelpModal.vue"
 import ErrorLayout from "../components/ErrorLayout.vue"
 import { useLibraryUiStore } from "@/stores/useLibraryUiStore"
 import { useQueueStore } from "@/stores/useQueueStore"
+import { useAuthStore } from "@/stores/useAuthStore"
 
 type MediaType = "all" | "movie" | "show" | "season" | "collection"
 type SortKey = "title" | "year" | "added"
@@ -32,6 +33,12 @@ const route = useRoute()
 const router = useRouter()
 const uiStore = useLibraryUiStore()
 const queueStore = useQueueStore()
+const authStore = useAuthStore()
+
+async function logout() {
+  await authStore.logout()
+  router.push("/login")
+}
 
 const VALID_TABS: MediaType[] = ["all", "movie", "show", "season", "collection"]
 const VALID_SORTS: SortKey[] = ["title", "year", "added"]
@@ -126,19 +133,20 @@ const menuItems = computed<DropdownMenuItem[][]>(() => {
       },
     })
   }
-  return [
-    items,
-    [
-      { label: "Settings", icon: "i-lucide-settings", to: "/settings" },
-      {
-        label: "Help",
-        icon: "i-lucide-circle-help",
-        onSelect: () => {
-          helpModalOpen.value = true
-        },
+  const secondGroup: DropdownMenuItem[] = [
+    { label: "Settings", icon: "i-lucide-settings", to: "/settings" },
+    {
+      label: "Help",
+      icon: "i-lucide-circle-help",
+      onSelect: () => {
+        helpModalOpen.value = true
       },
-    ],
+    },
   ]
+  if (authStore.authEnabled) {
+    return [items, secondGroup, [{ label: "Logout", icon: "i-lucide-log-out", onSelect: logout }]]
+  }
+  return [items, secondGroup]
 })
 
 defineShortcuts({
@@ -398,6 +406,15 @@ function onSynced(items: Array<{ ratingKey: string; updatedAt: number }>) {
             color="neutral"
             size="sm"
             @click="helpModalOpen = true"
+          />
+        </UTooltip>
+        <UTooltip v-if="authStore.authEnabled" text="Logout">
+          <UButton
+            icon="i-lucide-log-out"
+            variant="ghost"
+            color="neutral"
+            size="sm"
+            @click="logout"
           />
         </UTooltip>
       </div>

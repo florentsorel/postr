@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import { reactive, ref } from "vue"
+import { useRouter } from "vue-router"
+import { useAuthStore } from "@/stores/useAuthStore"
+
+const router = useRouter()
+const authStore = useAuthStore()
 
 const state = reactive({
   username: "",
   password: "",
+  rememberMe: false,
 })
 
 const error = ref("")
@@ -18,7 +24,11 @@ async function onSubmit() {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(state),
+      body: JSON.stringify({
+        username: state.username,
+        password: state.password,
+        rememberMe: state.rememberMe,
+      }),
     })
 
     if (!res.ok) {
@@ -26,7 +36,11 @@ async function onSubmit() {
       return
     }
 
-    window.location.href = "/"
+    authStore.authenticated = true
+    state.username = ""
+    state.password = ""
+    state.rememberMe = false
+    router.push("/")
   } catch {
     error.value = "Unable to connect to server"
   } finally {
@@ -89,6 +103,8 @@ async function onSubmit() {
               </template>
             </UInput>
           </UFormField>
+
+          <UCheckbox v-model="state.rememberMe" label="Remember me" :disabled="loading" />
 
           <!-- Error -->
           <p v-if="error" class="text-sm text-red-400 flex items-center gap-2">
