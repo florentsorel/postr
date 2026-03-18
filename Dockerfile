@@ -19,7 +19,7 @@ RUN go mod download
 COPY . .
 COPY --from=assets /app/internal/web/dist ./internal/web/dist
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /tmp/postr ./cmd/api
+RUN CGO_ENABLED=0 GOOS=linux go build -o /tmp/postr ./cmd/postr
 
 
 FROM gcr.io/distroless/static-debian13:latest
