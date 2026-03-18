@@ -27,7 +27,7 @@ type queueItemResponse struct {
 func (h *Handler) GetQueue(c *echo.Context) error {
 	rows, err := h.db.ListPosterQueueWithMedia(c.Request().Context())
 	if err != nil {
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
 	items := make([]queueItemResponse, 0, len(rows))
@@ -68,7 +68,7 @@ func (h *Handler) RemoveFromQueue(c *echo.Context) error {
 	}
 
 	if err := h.db.DeletePosterQueueByRatingKey(ctx, ratingKey); err != nil {
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
 	resp := removeQueueResponse{Thumb: "/api/media/" + ratingKey + "/thumb"}
@@ -88,6 +88,7 @@ func (h *Handler) RemoveFromQueue(c *echo.Context) error {
 						RatingKey: ratingKey,
 						UpdatedAt: now,
 					})
+					slog.Info("marked as orphan during restore", "title", m.Title, "ratingKey", ratingKey)
 				} else {
 					_ = h.db.SetLocallyModified(ctx, db.SetLocallyModifiedParams{
 						LocallyModified: 0,
@@ -125,7 +126,7 @@ func (h *Handler) PushPoster(c *echo.Context) error {
 		if errors.Is(err, sql.ErrNoRows) {
 			return jsonError(c, http.StatusNotFound, "media not found")
 		}
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
 	ext := "jpg"
@@ -163,7 +164,7 @@ func (h *Handler) PushPoster(c *echo.Context) error {
 	slog.Info("poster pushed to Plex", "type", m.Type, "title", m.Title)
 
 	if err := h.db.DeletePosterQueueByRatingKey(ctx, ratingKey); err != nil {
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
 	now := time.Now().Unix()
@@ -172,7 +173,7 @@ func (h *Handler) PushPoster(c *echo.Context) error {
 		UpdatedAt:       now,
 		RatingKey:       ratingKey,
 	}); err != nil {
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
 	return c.NoContent(http.StatusNoContent)
@@ -186,7 +187,7 @@ func (h *Handler) PushAllPosters(c *echo.Context) error {
 
 	rows, err := h.db.ListPosterQueueWithMedia(ctx)
 	if err != nil {
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 
 	type result struct {
@@ -199,6 +200,7 @@ func (h *Handler) PushAllPosters(c *echo.Context) error {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
+	slog.Info("push all started", "count", len(rows))
 	for i, r := range rows {
 		wg.Add(1)
 		go func(i int, ratingKey, rType, thumbStr string) {
@@ -221,6 +223,7 @@ func (h *Handler) PushAllPosters(c *echo.Context) error {
 			}
 
 			if err := h.plex.UploadPoster(ctx, ratingKey, data, plex.ContentTypeFromExt(thumbStr)); err != nil {
+				slog.Error("push all: failed to push poster", "ratingKey", ratingKey, "error", err)
 				mu.Lock()
 				results[i] = result{RatingKey: ratingKey, Error: err.Error()}
 				mu.Unlock()
@@ -253,5 +256,6 @@ func (h *Handler) PushAllPosters(c *echo.Context) error {
 	}
 
 	wg.Wait()
+	slog.Info("push all done", "total", len(rows))
 	return c.JSON(http.StatusOK, results)
 }

@@ -86,7 +86,7 @@ func (h *Handler) Login(c *echo.Context) error {
 
 	token, err := generateToken()
 	if err != nil {
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 	h.sessions.create(token)
 
