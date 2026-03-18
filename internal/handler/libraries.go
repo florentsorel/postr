@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	postrdb "github.com/florentsorel/postr/internal/db"
@@ -40,7 +41,7 @@ func (h *Handler) GetLibraries(c *echo.Context) error {
 	// Load saved enabled states from DB
 	saved, err := h.db.ListLibrarySettings(c.Request().Context())
 	if err != nil {
-		return jsonInternalError(c)
+		return jsonInternalError(c, err)
 	}
 	enabledByKey := make(map[string]bool, len(saved))
 	for _, s := range saved {
@@ -88,8 +89,9 @@ func (h *Handler) SaveLibraries(c *echo.Context) error {
 			enabled = 1
 		}
 		if err := h.db.UpsertLibrarySetting(ctx, postrdb.UpsertLibrarySettingParams{SectionKey: lib.Key, Enabled: enabled}); err != nil {
-			return jsonInternalError(c)
+			return jsonInternalError(c, err)
 		}
+		slog.Info("library setting saved", "key", lib.Key, "enabled", lib.Enabled)
 	}
 
 	return c.NoContent(http.StatusNoContent)
