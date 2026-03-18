@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -78,8 +79,9 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 		_ = rc.Flush()
 	}
 
-	log := c.Logger()
 	ctx := c.Request().Context()
+
+	slog.Info("import started")
 
 	// Phase 1: fetch all sections and items upfront to know the total.
 	sections, err := h.plex.Sections(ctx)
@@ -104,7 +106,7 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 		for _, sectionKey := range target.SectionKeys {
 			sec, ok := sectionByKey[sectionKey]
 			if !ok {
-				log.Warn("section not found in Plex", "key", sectionKey)
+				slog.Warn("section not found in Plex", "key", sectionKey)
 				continue
 			}
 
@@ -143,6 +145,7 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 				return nil
 			}
 
+			slog.Info("fetching items from Plex", "library", sec.Title, "type", target.Type, "count", len(items))
 			batches = append(batches, workBatch{target, sectionKey, sec, items})
 		}
 	}
@@ -158,6 +161,8 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 	current := 0
 
 	for _, batch := range batches {
+		slog.Info("importing library", "library", batch.section.Title, "type", batch.target.Type, "total", len(batch.items))
+
 		library, err := h.db.UpsertLibrary(ctx, db.UpsertLibraryParams{
 			SectionKey: batch.sectionKey,
 			Title:      batch.section.Title,
@@ -165,7 +170,7 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 			ImportedAt: time.Now().Unix(),
 		})
 		if err != nil {
-			log.Error("failed to upsert library", "section", batch.sectionKey, "error", err)
+			slog.Error("failed to upsert library", "section", batch.sectionKey, "error", err)
 			send(sseErrorEvent{Type: "error", Message: "database error for library " + batch.section.Title})
 			return nil
 		}
@@ -176,7 +181,7 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 			Type:      batch.target.Type,
 		})
 		if err != nil {
-			log.Error("failed to list existing keys", "error", err)
+			slog.Error("failed to list existing keys", "error", err)
 			send(sseErrorEvent{Type: "error", Message: "database error"})
 			return nil
 		}
@@ -204,7 +209,7 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 					continue
 				}
 				if saveErr != nil && !errors.Is(saveErr, errThumbUnchanged) {
-					log.Warn("failed to save thumb", "ratingKey", item.RatingKey, "error", saveErr)
+					slog.Warn("failed to save thumb", "title", item.Title, "ratingKey", item.RatingKey, "error", saveErr)
 					send(sseSkipEvent{Type: "skip", Title: item.Title, Message: "thumbnail download failed: " + saveErr.Error()})
 				}
 			}
@@ -222,16 +227,17 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 				UpdatedAt:    now,
 			}
 			if err := h.db.UpsertMedia(ctx, params); err != nil {
-				log.Error("failed to upsert media", "ratingKey", item.RatingKey, "error", err)
+				slog.Error("failed to upsert media", "title", item.Title, "ratingKey", item.RatingKey, "error", err)
 			} else {
 				if !isExisting {
+					slog.Info("imported", "type", batch.target.Type, "title", item.Title)
 					added++
 				}
 				processedSet[item.RatingKey] = struct{}{}
 				// The poster was just re-downloaded from Plex, so any pending
 				// local push is now stale — remove it from the queue.
 				if err := h.db.DeletePosterQueueByRatingKey(ctx, item.RatingKey); err != nil {
-					log.Warn("failed to remove stale queue entry", "ratingKey", item.RatingKey, "error", err)
+					slog.Warn("failed to remove stale queue entry", "ratingKey", item.RatingKey, "error", err)
 				}
 			}
 
@@ -242,7 +248,7 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 		for key := range existingSet {
 			if _, processed := processedSet[key]; !processed {
 				if err := h.db.DeleteMediaByRatingKey(ctx, key); err != nil {
-					log.Error("failed to delete stale media", "ratingKey", key, "error", err)
+					slog.Error("failed to delete stale media", "ratingKey", key, "error", err)
 				} else {
 					deleted++
 				}
@@ -250,6 +256,7 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 		}
 	}
 
+	slog.Info("import done", "added", added, "skipped", skipped, "deleted", deleted)
 	send(sseDoneEvent{Type: "done", Added: added, Skipped: skipped, Deleted: deleted})
 	return nil
 }
