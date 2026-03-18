@@ -244,12 +244,16 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 			send(sseProgressEvent{Type: "progress", Current: current, Total: total})
 		}
 
-		// Delete items that are no longer in Plex for this library+type.
+		// Mark items no longer in Plex as orphans.
 		for key := range existingSet {
 			if _, processed := processedSet[key]; !processed {
-				if err := h.db.DeleteMediaByRatingKey(ctx, key); err != nil {
-					slog.Error("failed to delete stale media", "ratingKey", key, "error", err)
+				if err := h.db.MarkOrphan(ctx, db.MarkOrphanParams{
+					RatingKey: key,
+					UpdatedAt: now,
+				}); err != nil {
+					slog.Error("failed to mark orphan", "ratingKey", key, "error", err)
 				} else {
+					slog.Info("marked as orphan", "type", batch.target.Type, "ratingKey", key)
 					deleted++
 				}
 			}

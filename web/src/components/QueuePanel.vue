@@ -6,7 +6,7 @@ import MediaItemRow from "./MediaItemRow.vue"
 defineProps<{ open: boolean }>()
 const emit = defineEmits<{
   "update:open": [value: boolean]
-  restored: [payload: { ratingKey: string; thumb: string }]
+  restored: [payload: { ratingKey: string; thumb: string | null }]
 }>()
 
 const queue = useQueueStore()
@@ -85,8 +85,8 @@ async function pushOne(ratingKey: string) {
                 :disabled="pushingAll || pushingItem === item.ratingKey"
                 @click="
                   async () => {
-                    const thumb = await queue.removeItem(item.ratingKey)
-                    if (thumb) emit('restored', { ratingKey: item.ratingKey, thumb })
+                    const { thumb } = await queue.removeItem(item.ratingKey)
+                    emit('restored', { ratingKey: item.ratingKey, thumb })
                   }
                 "
               />

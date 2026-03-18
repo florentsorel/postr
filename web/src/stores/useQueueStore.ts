@@ -28,16 +28,23 @@ export const useQueueStore = defineStore("queue", () => {
     if (res.ok) items.value = await res.json()
   }
 
-  async function removeItem(ratingKey: string): Promise<string | null> {
+  async function removeItem(
+    ratingKey: string
+  ): Promise<{ thumb: string | null; warning?: string; orphaned?: boolean }> {
     pulling.value = new Set([...pulling.value, ratingKey])
     try {
       const res = await fetch(`/api/queue/${ratingKey}`, { method: "DELETE" })
-      items.value = items.value.filter((i) => i.ratingKey !== ratingKey)
-      if (res.ok) {
+      if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        return data.thumb ? data.thumb + "?t=" + Date.now() : null
+        throw new Error(data.error ?? "Failed to restore poster")
       }
-      return null
+      items.value = items.value.filter((i) => i.ratingKey !== ratingKey)
+      const data = await res.json().catch(() => ({}))
+      return {
+        thumb: data.thumb ? data.thumb + "?t=" + Date.now() : null,
+        warning: data.warning,
+        orphaned: data.orphaned ?? false,
+      }
     } finally {
       pulling.value = new Set([...pulling.value].filter((k) => k !== ratingKey))
     }
@@ -54,15 +61,20 @@ export const useQueueStore = defineStore("queue", () => {
     }
   }
 
-  async function pushOne(ratingKey: string): Promise<void> {
+  async function pushOne(ratingKey: string): Promise<{ orphaned?: boolean }> {
     pushing.value = new Set([...pushing.value, ratingKey])
     try {
       const res = await fetch(`/api/media/${ratingKey}/push`, { method: "POST" })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
+        if (data.orphaned) {
+          items.value = items.value.filter((i) => i.ratingKey !== ratingKey)
+          return { orphaned: true }
+        }
         throw new Error(data.error ?? "Push failed")
       }
       items.value = items.value.filter((i) => i.ratingKey !== ratingKey)
+      return {}
     } finally {
       pushing.value = new Set([...pushing.value].filter((k) => k !== ratingKey))
     }

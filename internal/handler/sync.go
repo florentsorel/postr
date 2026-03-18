@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/florentsorel/postr/internal/db"
+	"github.com/florentsorel/postr/internal/plex"
 	"github.com/labstack/echo/v5"
 )
 
@@ -26,6 +27,15 @@ type sseSyncDoneEvent struct {
 	Type    string `json:"type"`
 	Changed int    `json:"changed"`
 	Checked int    `json:"checked"`
+	Failed  int    `json:"failed"`
+}
+
+type sseSyncFailedEvent struct {
+	Type      string `json:"type"`
+	RatingKey string `json:"ratingKey"`
+	Title     string `json:"title"`
+	Reason    string `json:"reason"`
+	Orphaned  bool   `json:"orphaned,omitempty"`
 }
 
 func (h *Handler) SyncFromPlex(c *echo.Context) error {
@@ -47,17 +57,16 @@ func (h *Handler) SyncFromPlex(c *echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
-
 	media, err := h.db.ListMedia(ctx)
 	if err != nil {
 		send(sseErrorEvent{Type: "error", Message: "failed to list media"})
 		return nil
 	}
 
-	// Only check items that haven't been locally modified by the user.
+	// Only check items that haven't been locally modified and are not orphans.
 	var toCheck []db.ListMediaRow
 	for _, m := range media {
-		if m.LocallyModified == 0 {
+		if m.LocallyModified == 0 && m.IsOrphan == 0 {
 			toCheck = append(toCheck, m)
 		}
 	}
@@ -65,7 +74,7 @@ func (h *Handler) SyncFromPlex(c *echo.Context) error {
 	slog.Info("sync started", "checking", len(toCheck))
 	send(sseStartEvent{Type: "start", Total: len(toCheck)})
 
-	var changed int
+	var changed, failed int
 	for i, m := range toCheck {
 		thumbPath := "/library/metadata/" + m.RatingKey + "/thumb"
 		ext, saveErr := h.saveThumb(ctx, m.Type, m.RatingKey, thumbPath)
@@ -75,6 +84,13 @@ func (h *Handler) SyncFromPlex(c *echo.Context) error {
 		}
 		if saveErr != nil {
 			slog.Warn("sync: failed to download thumb", "title", m.Title, "ratingKey", m.RatingKey, "error", saveErr)
+			reason := "Failed to download poster"
+			if errors.Is(saveErr, plex.ErrNotFound) {
+				reason = "No longer exists in Plex"
+				_ = h.db.MarkOrphan(ctx, db.MarkOrphanParams{RatingKey: m.RatingKey, UpdatedAt: time.Now().Unix()})
+			}
+			failed++
+			send(sseSyncFailedEvent{Type: "failed", RatingKey: m.RatingKey, Title: m.Title, Reason: reason, Orphaned: errors.Is(saveErr, plex.ErrNotFound)})
 			send(sseProgressEvent{Type: "progress", Current: i + 1, Total: len(toCheck)})
 			continue
 		}
@@ -104,7 +120,7 @@ func (h *Handler) SyncFromPlex(c *echo.Context) error {
 		send(sseProgressEvent{Type: "progress", Current: i + 1, Total: len(toCheck)})
 	}
 
-	slog.Info("sync done", "changed", changed, "checked", len(toCheck))
-	send(sseSyncDoneEvent{Type: "done", Changed: changed, Checked: len(toCheck)})
+	slog.Info("sync done", "changed", changed, "failed", failed, "checked", len(toCheck))
+	send(sseSyncDoneEvent{Type: "done", Changed: changed, Checked: len(toCheck), Failed: failed})
 	return nil
 }

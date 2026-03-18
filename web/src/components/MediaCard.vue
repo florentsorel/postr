@@ -11,6 +11,7 @@ interface Props {
   pulling?: boolean
   inQueue?: boolean
   locallyModified?: boolean
+  isOrphan?: boolean
 }
 
 defineProps<Props>()
@@ -19,6 +20,7 @@ defineEmits<{
   changePoster: []
   sendToPlex: []
   getFromPlex: []
+  deleteOrphan: []
 }>()
 
 const typeLabel: Record<MediaType, string> = {
@@ -37,7 +39,10 @@ const typeLabel: Record<MediaType, string> = {
         v-if="thumb"
         :src="thumb"
         :alt="title"
-        class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+        :class="[
+          'w-full h-full object-cover transition-transform duration-300 group-hover:scale-105',
+          isOrphan && 'opacity-40',
+        ]"
       />
       <div
         v-else
@@ -61,51 +66,73 @@ const typeLabel: Record<MediaType, string> = {
         v-else
         class="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity duration-200 hidden sm:flex flex-col items-center justify-center gap-2 p-3"
       >
-        <UButton
-          icon="i-lucide-image"
-          size="sm"
-          variant="solid"
-          block
-          @click.stop="$emit('changePoster')"
-        >
-          Change poster
-        </UButton>
-        <UButton
-          v-if="inQueue"
-          icon="i-lucide-upload"
-          size="sm"
-          variant="outline"
-          color="neutral"
-          block
-          @click.stop="$emit('sendToPlex')"
-        >
-          Send to Plex
-        </UButton>
-        <UButton
-          v-if="locallyModified"
-          icon="i-lucide-download"
-          size="sm"
-          variant="outline"
-          color="neutral"
-          block
-          @click.stop="$emit('getFromPlex')"
-        >
-          Get from Plex
-        </UButton>
+        <template v-if="isOrphan">
+          <UButton
+            icon="i-lucide-trash-2"
+            size="sm"
+            color="error"
+            variant="solid"
+            block
+            @click.stop="$emit('deleteOrphan')"
+          >
+            Delete
+          </UButton>
+        </template>
+        <template v-else>
+          <UButton
+            icon="i-lucide-image"
+            size="sm"
+            variant="solid"
+            block
+            @click.stop="$emit('changePoster')"
+          >
+            Change poster
+          </UButton>
+          <UButton
+            v-if="inQueue"
+            icon="i-lucide-upload"
+            size="sm"
+            variant="outline"
+            color="neutral"
+            block
+            @click.stop="$emit('sendToPlex')"
+          >
+            Send to Plex
+          </UButton>
+          <UButton
+            v-if="locallyModified"
+            icon="i-lucide-download"
+            size="sm"
+            variant="outline"
+            color="neutral"
+            block
+            @click.stop="$emit('getFromPlex')"
+          >
+            Get from Plex
+          </UButton>
+        </template>
       </div>
     </div>
 
     <!-- Info -->
     <div class="px-0.5">
       <div class="flex items-center gap-1.5">
-        <p class="text-sm font-medium text-white truncate leading-tight flex-1">{{ title }}</p>
-        <UTooltip v-if="inQueue" text="Pending push to Plex">
+        <p
+          class="text-sm font-medium truncate leading-tight flex-1"
+          :class="isOrphan ? 'text-neutral-500' : 'text-white'"
+        >
+          {{ title }}
+        </p>
+        <UTooltip v-if="inQueue && !isOrphan" text="Pending push to Plex">
           <UIcon name="i-lucide-upload" class="w-3.5 h-3.5 text-primary-400 shrink-0" />
+        </UTooltip>
+        <UTooltip v-if="isOrphan" text="No longer in Plex">
+          <UIcon name="i-lucide-unlink" class="w-3.5 h-3.5 text-neutral-600 shrink-0" />
         </UTooltip>
       </div>
       <div class="flex items-center gap-1.5 mt-1">
         <span
-          :class="`badge-${type}`"
+          :class="isOrphan ? 'badge-neutral' : `badge-${type}`"
           class="inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium"
         >
           {{ typeLabel[type] }}
@@ -119,37 +146,51 @@ const typeLabel: Record<MediaType, string> = {
 
     <!-- Actions (xs only) -->
     <div v-if="!syncing && !pulling" class="flex flex-col gap-1.5 sm:hidden">
-      <UButton
-        icon="i-lucide-image"
-        size="xs"
-        variant="solid"
-        block
-        @click.stop="$emit('changePoster')"
-      >
-        Change poster
-      </UButton>
-      <UButton
-        v-if="inQueue"
-        icon="i-lucide-upload"
-        size="xs"
-        variant="outline"
-        color="neutral"
-        block
-        @click.stop="$emit('sendToPlex')"
-      >
-        Send to Plex
-      </UButton>
-      <UButton
-        v-if="locallyModified"
-        icon="i-lucide-download"
-        size="xs"
-        variant="outline"
-        color="neutral"
-        block
-        @click.stop="$emit('getFromPlex')"
-      >
-        Get from Plex
-      </UButton>
+      <template v-if="isOrphan">
+        <UButton
+          icon="i-lucide-trash-2"
+          size="xs"
+          color="error"
+          variant="solid"
+          block
+          @click.stop="$emit('deleteOrphan')"
+        >
+          Delete
+        </UButton>
+      </template>
+      <template v-else>
+        <UButton
+          icon="i-lucide-image"
+          size="xs"
+          variant="solid"
+          block
+          @click.stop="$emit('changePoster')"
+        >
+          Change poster
+        </UButton>
+        <UButton
+          v-if="inQueue"
+          icon="i-lucide-upload"
+          size="xs"
+          variant="outline"
+          color="neutral"
+          block
+          @click.stop="$emit('sendToPlex')"
+        >
+          Send to Plex
+        </UButton>
+        <UButton
+          v-if="locallyModified"
+          icon="i-lucide-download"
+          size="xs"
+          variant="outline"
+          color="neutral"
+          block
+          @click.stop="$emit('getFromPlex')"
+        >
+          Get from Plex
+        </UButton>
+      </template>
     </div>
   </div>
 </template>

@@ -25,6 +25,7 @@ type mediaResponse struct {
 	SeasonNumber    *int64 `json:"seasonNumber,omitempty"`
 	Thumb           string `json:"thumb,omitempty"`
 	LocallyModified bool   `json:"locallyModified"`
+	IsOrphan        bool   `json:"isOrphan"`
 	AddedAt         *int64 `json:"addedAt,omitempty"`
 }
 
@@ -223,8 +224,32 @@ func (h *Handler) GetMedia(c *echo.Context) error {
 			item.AddedAt = &m.AddedAt.Int64
 		}
 		item.LocallyModified = m.LocallyModified != 0
+		item.IsOrphan = m.IsOrphan != 0
 		items = append(items, item)
 	}
 
 	return c.JSON(http.StatusOK, items)
+}
+
+func (h *Handler) DeleteOrphan(c *echo.Context) error {
+	ratingKey := c.Param("ratingKey")
+	ctx := c.Request().Context()
+
+	m, err := h.db.GetMediaByRatingKey(ctx, ratingKey)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return jsonError(c, http.StatusNotFound, "media not found")
+		}
+		return jsonInternalError(c)
+	}
+
+	if err := h.db.DeleteMediaByRatingKey(ctx, ratingKey); err != nil {
+		return jsonInternalError(c)
+	}
+
+	for _, ext := range []string{"jpg", "png", "webp"} {
+		_ = os.Remove(filepath.Join(h.config.DataPath, "posters", m.Type, ratingKey+"."+ext))
+	}
+
+	return c.NoContent(http.StatusNoContent)
 }

@@ -1,7 +1,7 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
 
-type MediaTab = "all" | "movie" | "show" | "season" | "collection"
+type MediaTab = "all" | "movie" | "show" | "season" | "collection" | "orphan"
 type SortKey = "title" | "year" | "added"
 
 const SORT_UNAVAILABLE: Record<MediaTab, SortKey[]> = {
@@ -10,6 +10,7 @@ const SORT_UNAVAILABLE: Record<MediaTab, SortKey[]> = {
   show: ["year"],
   season: ["year"],
   collection: ["year"],
+  orphan: ["title", "year", "added"],
 }
 
 const DEFAULT_SORT: SortKey = "added"

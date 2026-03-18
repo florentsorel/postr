@@ -180,62 +180,57 @@ function close() {
     <template #body>
       <!-- Selecting phase -->
       <div v-if="phase === 'selecting'" class="flex flex-col gap-4">
-        <div class="flex items-center gap-2 text-sm px-1">
-          <template v-if="pingStatus === 'loading'">
-            <UIcon name="i-lucide-loader-circle" class="w-4 h-4 text-neutral-400 animate-spin" />
-            <span class="text-neutral-400">Checking Plex connection…</span>
-          </template>
-          <template v-else-if="pingStatus === 'ok'">
-            <UIcon name="i-lucide-circle-check" class="w-4 h-4 text-green-400" />
-            <span class="text-green-400">Plex server is reachable</span>
-          </template>
-          <template v-else-if="pingStatus === 'error'">
-            <UIcon name="i-lucide-circle-x" class="w-4 h-4 text-red-400" />
-            <span class="text-red-400">{{ pingError }}</span>
-            <UButton
-              size="xs"
-              variant="ghost"
-              color="neutral"
-              icon="i-lucide-refresh-cw"
-              class="ml-auto"
-              @click="checkConnection"
-            />
-          </template>
+        <!-- Loading -->
+        <div v-if="pingStatus === 'loading'" class="flex items-center gap-2 text-sm px-1">
+          <UIcon name="i-lucide-loader-circle" class="w-4 h-4 text-neutral-400 animate-spin" />
+          <span class="text-neutral-400">Checking Plex connection…</span>
         </div>
 
-        <USeparator />
+        <!-- Error -->
+        <div v-else-if="pingStatus === 'error'" class="flex items-center gap-2 text-sm px-1">
+          <UIcon name="i-lucide-circle-x" class="w-4 h-4 text-red-400" />
+          <span class="text-red-400">{{ pingError }}</span>
+          <UButton
+            size="xs"
+            variant="ghost"
+            color="neutral"
+            icon="i-lucide-refresh-cw"
+            class="ml-auto"
+            @click="checkConnection"
+          />
+        </div>
 
-        <div
-          v-if="availableTypes.length === 0 && pingStatus === 'ok'"
-          class="text-sm text-neutral-500 px-1"
-        >
-          No libraries enabled. Enable libraries in Settings first.
-        </div>
-        <div v-else class="flex flex-col gap-3">
-          <label
-            v-for="type in availableTypes"
-            :key="type.value"
-            class="flex items-center gap-3 px-4 py-3 rounded-lg bg-neutral-800/50 border border-neutral-700/50 cursor-pointer hover:bg-neutral-800 transition-colors"
-          >
-            <UCheckbox
-              :model-value="selected.includes(type.value)"
-              @update:model-value="
-                (v) =>
-                  v ? selected.push(type.value) : selected.splice(selected.indexOf(type.value), 1)
-              "
-            />
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-medium text-white">{{ type.label }}</p>
-              <p class="text-xs text-neutral-500 mt-0.5 truncate">
-                {{
-                  enabledSectionsFor(type.value)
-                    .map((l) => l.title)
-                    .join(", ")
-                }}
-              </p>
-            </div>
-          </label>
-        </div>
+        <!-- OK -->
+        <template v-else-if="pingStatus === 'ok'">
+          <div v-if="availableTypes.length === 0" class="text-sm text-neutral-500 px-1">
+            No libraries enabled. Enable libraries in Settings first.
+          </div>
+          <div v-else class="flex flex-col gap-3">
+            <label
+              v-for="type in availableTypes"
+              :key="type.value"
+              class="flex items-center gap-3 px-4 py-3 rounded-lg bg-neutral-800/50 border border-neutral-700/50 cursor-pointer hover:bg-neutral-800 transition-colors"
+            >
+              <UCheckbox
+                :model-value="selected.includes(type.value)"
+                @update:model-value="
+                  (v) =>
+                    v ? selected.push(type.value) : selected.splice(selected.indexOf(type.value), 1)
+                "
+              />
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-white">{{ type.label }}</p>
+                <p class="text-xs text-neutral-500 mt-0.5 truncate">
+                  {{
+                    enabledSectionsFor(type.value)
+                      .map((l) => l.title)
+                      .join(", ")
+                  }}
+                </p>
+              </div>
+            </label>
+          </div>
+        </template>
       </div>
 
       <!-- Importing phase -->

@@ -4,6 +4,10 @@ export async function readSSEStream(
   onEvent: (event: Record<string, unknown>) => void
 ): Promise<void> {
   const response = await fetch(url, options)
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new Error(data.error ?? "Request failed")
+  }
   const reader = response.body!.getReader()
   const decoder = new TextDecoder()
   let buffer = ""

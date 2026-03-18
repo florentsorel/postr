@@ -171,7 +171,11 @@ watch(
     :dismissible="false"
     :ui="{ overlay: 'items-start pt-10' }"
     :title="item?.title ?? 'Change poster'"
-    :description="item ? [item.year, item.type].filter(Boolean).join(' · ') : undefined"
+    :description="
+      item
+        ? [item.year, item.type].filter(Boolean).join(' · ') || 'Change poster artwork'
+        : 'Change poster artwork'
+    "
     @update:open="$emit('update:open', $event)"
   >
     <template #body>
