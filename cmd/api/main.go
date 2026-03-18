@@ -35,7 +35,13 @@ func main() {
 
 	h := handler.New(db.New(conn), cfg, plexClient)
 
-	api := e.Group("/api")
+	// Public auth routes
+	e.POST("/api/auth/login", h.Login)
+	e.POST("/api/auth/logout", h.Logout)
+	e.GET("/api/auth/check", h.AuthCheck)
+
+	// Protected routes
+	api := e.Group("/api", h.RequireAuth)
 	api.GET("/settings", h.GetSettings)
 	api.POST("/settings", h.SaveSettings)
 

@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue"
+import { useRouter } from "vue-router"
 import { useApiError } from "@/composables/useApiError"
+import { useAuthStore } from "@/stores/useAuthStore"
+
+const router = useRouter()
+const authStore = useAuthStore()
+
+async function logout() {
+  await authStore.logout()
+  router.push("/login")
+}
 
 type PingStatus = "idle" | "loading" | "ok" | "error"
 const pingStatus = ref<PingStatus>("idle")
@@ -149,7 +159,17 @@ async function save() {
       </div>
       <USeparator orientation="vertical" class="h-5" />
       <h1 class="text-sm font-medium text-neutral-300">Settings</h1>
-      <div class="ml-auto">
+      <div class="ml-auto flex items-center gap-2">
+        <UButton
+          v-if="authStore.authEnabled"
+          icon="i-lucide-log-out"
+          variant="ghost"
+          color="neutral"
+          size="sm"
+          @click="logout"
+        >
+          Logout
+        </UButton>
         <UButton :loading="saving" icon="i-lucide-save" size="sm" @click="save">
           Save changes
         </UButton>

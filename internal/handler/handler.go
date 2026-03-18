@@ -21,13 +21,14 @@ type PlexClient interface {
 }
 
 type Handler struct {
-	db     *db.Queries
-	config *config.Config
-	plex   PlexClient
+	db       *db.Queries
+	config   *config.Config
+	plex     PlexClient
+	sessions *sessionStore
 }
 
 func New(queries *db.Queries, cfg *config.Config, plexClient PlexClient) *Handler {
-	return &Handler{db: queries, config: cfg, plex: plexClient}
+	return &Handler{db: queries, config: cfg, plex: plexClient, sessions: newSessionStore()}
 }
 
 type errorResponse struct {
