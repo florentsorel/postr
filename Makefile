@@ -9,7 +9,7 @@ test-web:
 	cd web && npm install && npm test
 
 build:
-	go build ./cmd/api
+	go build -o build/postr ./cmd/postr
 
 test: test-app test-web
 

@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/docker-ready-blue?logo=docker" alt="Docker ready" />
-  <img src="https://img.shields.io/badge/go-1.23+-00ADD8?logo=go" alt="Go version" />
+  <img src="https://img.shields.io/badge/go-1.26.1-00ADD8?logo=go" alt="Go version" />
   <img src="https://img.shields.io/badge/vue-3-42b883?logo=vuedotjs" alt="Vue 3" />
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License" />
 </p>
@@ -63,6 +63,8 @@ services:
 ```
 
 Then open [http://localhost:8720](http://localhost:8720) in your browser.
+
+> **Pinning a version** — replace `:latest` with a specific release tag (e.g. `ghcr.io/florentsorel/postr:1.2.3`) to avoid unexpected changes on container restart. Available tags are listed on the [container registry](https://github.com/florentsorel/postr/pkgs/container/postr).
 
 ---
 

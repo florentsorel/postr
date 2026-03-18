@@ -52,6 +52,13 @@
         "\\s*uses: (?<depName>.*?)-action@v\\d\\s*with:\\s*version:\\s*(?<currentValue>.*)"
       ],
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["README\\.md"],
+      "matchStrings": ["go-(?<currentValue>[\\d\\.]+)-00ADD8"],
+      "depNameTemplate": "go",
+      "datasourceTemplate": "golang-version"
     }
   ]
 }

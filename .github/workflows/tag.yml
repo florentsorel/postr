@@ -1,0 +1,44 @@
+name: Tag
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - web/package.json
+
+jobs:
+  tag:
+    name: Create release tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' web/package.json)
+          echo "value=v${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Check if tag exists
+        id: check
+        if: steps.version.outputs.value != 'v0.0.0'
+        run: |
+          if git ls-remote --tags origin "${{ steps.version.outputs.value }}" \
+            | grep -q "${{ steps.version.outputs.value }}"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create tag
+        if: >-
+          steps.version.outputs.value != 'v0.0.0' &&
+          steps.check.outputs.exists == 'false'
+        run: |
+          git tag "${{ steps.version.outputs.value }}"
+          git push origin "${{ steps.version.outputs.value }}"
