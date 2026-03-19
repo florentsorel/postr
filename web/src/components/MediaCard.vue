@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { ref, watch } from "vue"
+
 type MediaType = "movie" | "show" | "season" | "collection"
 
 interface Props {
@@ -14,7 +16,19 @@ interface Props {
   isOrphan?: boolean
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
+const imageLoaded = ref(!props.thumb)
+
+function onImageLoad() {
+  imageLoaded.value = true
+}
+
+watch(
+  () => props.thumb,
+  () => {
+    imageLoaded.value = false
+  }
+)
 
 defineEmits<{
   changePoster: []
@@ -35,6 +49,12 @@ const typeLabel: Record<MediaType, string> = {
   <div class="group flex flex-col gap-2 mb-4 sm:mb-0">
     <!-- Poster -->
     <div class="relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800">
+      <div
+        v-if="thumb && !imageLoaded"
+        class="absolute inset-0 bg-neutral-700 animate-pulse flex items-center justify-center"
+      >
+        <UIcon name="i-lucide-loader-circle" class="w-6 h-6 text-neutral-500 animate-spin" />
+      </div>
       <img
         v-if="thumb"
         :src="thumb"
@@ -42,7 +62,9 @@ const typeLabel: Record<MediaType, string> = {
         :class="[
           'w-full h-full object-cover transition-transform duration-300 group-hover:scale-105',
           isOrphan && 'opacity-40',
+          !imageLoaded && 'opacity-0',
         ]"
+        @load="onImageLoad"
       />
       <div
         v-else
@@ -63,7 +85,7 @@ const typeLabel: Record<MediaType, string> = {
 
       <!-- Hover overlay (sm+) -->
       <div
-        v-else
+        v-else-if="imageLoaded"
         class="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity duration-200 hidden sm:flex flex-col items-center justify-center gap-2 p-3"
       >
         <template v-if="isOrphan">
@@ -145,7 +167,7 @@ const typeLabel: Record<MediaType, string> = {
     </div>
 
     <!-- Actions (xs only) -->
-    <div v-if="!syncing && !pulling" class="flex flex-col gap-1.5 sm:hidden">
+    <div v-if="!syncing && !pulling && imageLoaded" class="flex flex-col gap-1.5 sm:hidden">
       <template v-if="isOrphan">
         <UButton
           icon="i-lucide-trash-2"

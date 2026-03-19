@@ -18,10 +18,16 @@
       "automerge": false
     },
     {
-      "description": "Auto-merge Go patch and minor updates (stable ecosystem)",
+      "description": "Auto-merge and group Go patch updates",
       "matchManagers": ["gomod"],
-      "matchDatasources": ["go"],
-      "matchUpdateTypes": ["patch", "minor"],
+      "matchUpdateTypes": ["patch"],
+      "groupName": "go patch",
+      "automerge": true
+    },
+    {
+      "description": "Auto-merge Go minor updates (separate PRs)",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor"],
       "automerge": true
     },
     {
@@ -31,16 +37,16 @@
       "automerge": false
     },
     {
-      "description": "Auto-merge npm patch and minor updates",
+      "description": "Auto-merge npm patch updates",
       "matchManagers": ["npm"],
-      "matchUpdateTypes": ["patch", "minor"],
-      "groupName": "npm patch and minor",
+      "matchUpdateTypes": ["patch"],
+      "groupName": "npm patch",
       "automerge": true
     },
     {
-      "description": "npm major updates are separate PRs",
+      "description": "npm minor and major updates are separate PRs",
       "matchManagers": ["npm"],
-      "matchUpdateTypes": ["major"],
+      "matchUpdateTypes": ["minor", "major"],
       "automerge": false
     }
   ],
