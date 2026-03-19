@@ -17,7 +17,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-const imageLoaded = ref(false)
+const imageLoaded = ref(!props.thumb)
 
 function onImageLoad() {
   imageLoaded.value = true
