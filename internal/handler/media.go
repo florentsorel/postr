@@ -46,6 +46,7 @@ func (h *Handler) GetMediaThumb(c *echo.Context) error {
 		ext = m.Thumb.String
 	}
 	path := filepath.Join(h.config.DataPath, "posters", m.Type, ratingKey+"."+ext)
+	c.Response().Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	http.ServeFile(c.Response(), c.Request(), path)
 	return nil
 }
