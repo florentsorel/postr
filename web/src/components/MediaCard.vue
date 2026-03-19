@@ -1,5 +1,10 @@
+<script lang="ts">
+import { ref } from "vue"
+const activeCardId = ref<symbol | null>(null)
+</script>
+
 <script setup lang="ts">
-import { ref, watch } from "vue"
+import { computed, watch } from "vue"
 
 type MediaType = "movie" | "show" | "season" | "collection"
 
@@ -18,6 +23,8 @@ interface Props {
 
 const props = defineProps<Props>()
 const imageLoaded = ref(!props.thumb)
+const cardId = Symbol()
+const tapped = computed(() => activeCardId.value === cardId)
 
 function onImageLoad() {
   imageLoaded.value = true
@@ -27,15 +34,31 @@ watch(
   () => props.thumb,
   () => {
     imageLoaded.value = false
+    if (activeCardId.value === cardId) activeCardId.value = null
   }
 )
 
-defineEmits<{
+type EmitName = "changePoster" | "sendToPlex" | "getFromPlex" | "deleteOrphan"
+
+const emit = defineEmits<{
   changePoster: []
   sendToPlex: []
   getFromPlex: []
   deleteOrphan: []
 }>()
+
+function onPosterClick() {
+  if (!imageLoaded.value || props.syncing || props.pulling) return
+  activeCardId.value = activeCardId.value === cardId ? null : cardId
+}
+
+function closeOverlay() {
+  activeCardId.value = null
+}
+
+function action(name: EmitName) {
+  ;(emit as (name: EmitName) => void)(name)
+}
 
 const typeLabel: Record<MediaType, string> = {
   movie: "Movie",
@@ -48,7 +71,10 @@ const typeLabel: Record<MediaType, string> = {
 <template>
   <div class="group flex flex-col gap-2 mb-4 sm:mb-0">
     <!-- Poster -->
-    <div class="relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800">
+    <div
+      class="relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800"
+      @click="onPosterClick"
+    >
       <div
         v-if="thumb && !imageLoaded"
         class="absolute inset-0 bg-neutral-700 animate-pulse flex items-center justify-center"
@@ -83,10 +109,16 @@ const typeLabel: Record<MediaType, string> = {
         <span class="text-xs text-white/80">{{ syncing ? "Pushing…" : "Getting…" }}</span>
       </div>
 
-      <!-- Hover overlay (sm+) -->
+      <!-- Actions overlay (hover on sm+, tap on xs) -->
       <div
         v-else-if="imageLoaded"
-        class="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity duration-200 hidden sm:flex flex-col items-center justify-center gap-2 p-3"
+        :class="[
+          'absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2 p-3 transition-opacity duration-200',
+          tapped
+            ? 'opacity-100 pointer-events-auto'
+            : 'opacity-0 pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto',
+        ]"
+        @click.stop="closeOverlay"
       >
         <template v-if="isOrphan">
           <UButton
@@ -95,7 +127,7 @@ const typeLabel: Record<MediaType, string> = {
             color="error"
             variant="solid"
             block
-            @click.stop="$emit('deleteOrphan')"
+            @click.stop="action('deleteOrphan')"
           >
             Delete
           </UButton>
@@ -106,7 +138,7 @@ const typeLabel: Record<MediaType, string> = {
             size="sm"
             variant="solid"
             block
-            @click.stop="$emit('changePoster')"
+            @click.stop="action('changePoster')"
           >
             Change poster
           </UButton>
@@ -117,7 +149,7 @@ const typeLabel: Record<MediaType, string> = {
             variant="outline"
             color="neutral"
             block
-            @click.stop="$emit('sendToPlex')"
+            @click.stop="action('sendToPlex')"
           >
             Send to Plex
           </UButton>
@@ -128,7 +160,7 @@ const typeLabel: Record<MediaType, string> = {
             variant="outline"
             color="neutral"
             block
-            @click.stop="$emit('getFromPlex')"
+            @click.stop="action('getFromPlex')"
           >
             Get from Plex
           </UButton>
@@ -164,55 +196,6 @@ const typeLabel: Record<MediaType, string> = {
         >
         <span v-if="year" class="text-xs text-neutral-500">{{ year }}</span>
       </div>
-    </div>
-
-    <!-- Actions (xs only) -->
-    <div v-if="!syncing && !pulling && imageLoaded" class="flex flex-col gap-1.5 sm:hidden">
-      <template v-if="isOrphan">
-        <UButton
-          icon="i-lucide-trash-2"
-          size="xs"
-          color="error"
-          variant="solid"
-          block
-          @click.stop="$emit('deleteOrphan')"
-        >
-          Delete
-        </UButton>
-      </template>
-      <template v-else>
-        <UButton
-          icon="i-lucide-image"
-          size="xs"
-          variant="solid"
-          block
-          @click.stop="$emit('changePoster')"
-        >
-          Change poster
-        </UButton>
-        <UButton
-          v-if="inQueue"
-          icon="i-lucide-upload"
-          size="xs"
-          variant="outline"
-          color="neutral"
-          block
-          @click.stop="$emit('sendToPlex')"
-        >
-          Send to Plex
-        </UButton>
-        <UButton
-          v-if="locallyModified"
-          icon="i-lucide-download"
-          size="xs"
-          variant="outline"
-          color="neutral"
-          block
-          @click.stop="$emit('getFromPlex')"
-        >
-          Get from Plex
-        </UButton>
-      </template>
     </div>
   </div>
 </template>
