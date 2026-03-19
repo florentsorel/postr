@@ -82,7 +82,8 @@ jobs:
       - name: Set image version
         id: version
         run: |
-          echo "value=${{ needs.tag.outputs.version }}" | sed 's/^v//' >> "$GITHUB_OUTPUT"
+          VERSION="${{ needs.tag.outputs.version }}"
+          echo "value=${VERSION#v}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
