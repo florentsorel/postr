@@ -271,11 +271,15 @@ func (h *Handler) PushAllPosters(c *echo.Context) error {
 func (h *Handler) resyncLocalThumb(ctx context.Context, mediaType, ratingKey string, updatedAt int64) {
 	thumbPath := "/library/metadata/" + ratingKey + "/thumb"
 	newExt, err := h.saveThumb(ctx, mediaType, ratingKey, thumbPath)
-	if err == nil {
-		_ = h.db.UpdateMediaThumb(ctx, db.UpdateMediaThumbParams{
-			Thumb:     sql.NullString{String: newExt, Valid: true},
-			UpdatedAt: updatedAt,
-			RatingKey: ratingKey,
-		})
+	if err != nil {
+		slog.Warn("resyncLocalThumb: failed to re-download poster from Plex — next sync may report a false change", "ratingKey", ratingKey, "error", err)
+		return
+	}
+	if err := h.db.UpdateMediaThumb(ctx, db.UpdateMediaThumbParams{
+		Thumb:     sql.NullString{String: newExt, Valid: true},
+		UpdatedAt: updatedAt,
+		RatingKey: ratingKey,
+	}); err != nil {
+		slog.Warn("resyncLocalThumb: failed to update thumb in DB", "ratingKey", ratingKey, "error", err)
 	}
 }
