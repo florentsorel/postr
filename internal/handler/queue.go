@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"log/slog"
@@ -176,6 +177,8 @@ func (h *Handler) PushPoster(c *echo.Context) error {
 		return jsonInternalError(c, err)
 	}
 
+	h.resyncLocalThumb(ctx, m.Type, ratingKey, now)
+
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -244,6 +247,8 @@ func (h *Handler) PushAllPosters(c *echo.Context) error {
 				RatingKey:       ratingKey,
 			})
 
+			h.resyncLocalThumb(ctx, rType, ratingKey, now)
+
 			mu.Lock()
 			results[i] = result{RatingKey: ratingKey}
 			mu.Unlock()
@@ -258,4 +263,19 @@ func (h *Handler) PushAllPosters(c *echo.Context) error {
 	wg.Wait()
 	slog.Info("push all done", "total", len(rows))
 	return c.JSON(http.StatusOK, results)
+}
+
+// resyncLocalThumb re-downloads the poster from Plex after a successful push
+// so the local copy matches what Plex actually stores (Plex may re-encode the
+// image). This prevents false "changed" detections on the next sync.
+func (h *Handler) resyncLocalThumb(ctx context.Context, mediaType, ratingKey string, updatedAt int64) {
+	thumbPath := "/library/metadata/" + ratingKey + "/thumb"
+	newExt, err := h.saveThumb(ctx, mediaType, ratingKey, thumbPath)
+	if err == nil {
+		_ = h.db.UpdateMediaThumb(ctx, db.UpdateMediaThumbParams{
+			Thumb:     sql.NullString{String: newExt, Valid: true},
+			UpdatedAt: updatedAt,
+			RatingKey: ratingKey,
+		})
+	}
 }
