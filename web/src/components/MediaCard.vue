@@ -6,6 +6,7 @@ const activeCardId = ref<symbol | null>(null)
 <script setup lang="ts">
 import { computed, watch } from "vue"
 import { useToast } from "@nuxt/ui/composables/useToast"
+import { isAllowedPosterMimeType } from "@/utils/poster"
 
 type MediaType = "movie" | "show" | "season" | "collection"
 
@@ -79,14 +80,15 @@ function onPosterClick() {
   activeCardId.value = activeCardId.value === cardId ? null : cardId
 }
 
-const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"]
+function getDragFileType(e: DragEvent): string {
+  return Array.from(e.dataTransfer?.items ?? []).find((i) => i.kind === "file")?.type ?? ""
+}
 
 function onDragOver(e: DragEvent) {
   if (props.syncing || props.pulling || props.uploading) return
   e.preventDefault()
   if (!e.dataTransfer) return
-  const fileType = e.dataTransfer.items[0]?.type
-  if (props.isOrphan || !ALLOWED_TYPES.includes(fileType)) {
+  if (props.isOrphan || !isAllowedPosterMimeType(getDragFileType(e))) {
     e.dataTransfer.dropEffect = "none"
     return
   }
@@ -111,7 +113,7 @@ function onDrop(e: DragEvent) {
     return
   }
   const file = e.dataTransfer?.files?.[0]
-  if (file && ["image/jpeg", "image/png", "image/webp"].includes(file.type)) emit("dropFile", file)
+  if (file && isAllowedPosterMimeType(file.type)) emit("dropFile", file)
 }
 
 function closeOverlay() {

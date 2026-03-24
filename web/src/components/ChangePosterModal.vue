@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue"
+import { isAllowedPosterMimeType } from "@/utils/poster"
 import PosterPreview from "./PosterPreview.vue"
 
 type MediaType = "movie" | "show" | "season" | "collection"
@@ -57,24 +58,26 @@ function onFileChange(e: Event) {
   if (file) setFile(file)
 }
 
-const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"]
-
 function onDragOver(e: DragEvent) {
   e.preventDefault()
   if (!e.dataTransfer) return
-  const fileType = e.dataTransfer.items[0]?.type
-  if (ALLOWED_TYPES.includes(fileType)) {
+  const fileType =
+    e.dataTransfer.files?.[0]?.type ??
+    Array.from(e.dataTransfer.items).find((i) => i.kind === "file")?.type ??
+    ""
+  if (isAllowedPosterMimeType(fileType)) {
     e.dataTransfer.dropEffect = "copy"
     isDragging.value = true
   } else {
     e.dataTransfer.dropEffect = "none"
+    isDragging.value = false
   }
 }
 
 function onDrop(e: DragEvent) {
   isDragging.value = false
   const file = e.dataTransfer?.files?.[0]
-  if (file && ALLOWED_TYPES.includes(file.type)) setFile(file)
+  if (file && isAllowedPosterMimeType(file.type)) setFile(file)
 }
 
 function setFile(file: File) {
