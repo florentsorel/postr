@@ -3,6 +3,7 @@ import { ref, onMounted } from "vue"
 import { useRouter } from "vue-router"
 import { useApiError } from "@/composables/useApiError"
 import { useAuthStore } from "@/stores/useAuthStore"
+const version = import.meta.env.VITE_APP_VERSION ?? "unknown"
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -157,7 +158,7 @@ async function save() {
         <div class="w-7 h-7 rounded-lg bg-primary-500 flex items-center justify-center">
           <UIcon name="i-lucide-image" class="w-4 h-4 text-white" />
         </div>
-        <span class="font-semibold text-white">Postr</span>
+        <span class="font-bold text-white text-lg">Postr</span>
       </div>
       <USeparator orientation="vertical" class="h-5" />
       <h1 class="text-sm font-medium text-neutral-300">Settings</h1>
@@ -433,11 +434,13 @@ async function save() {
       </section>
 
       <!-- Save -->
-      <div class="flex justify-end pt-2 pb-6">
+      <div class="flex justify-end pt-2">
         <UButton :loading="saving" icon="i-lucide-save" size="lg" @click="save">
           Save changes
         </UButton>
       </div>
+
+      <p class="text-center text-xs text-neutral-600 pb-6">v{{ version }}</p>
     </div>
   </div>
 </template>
