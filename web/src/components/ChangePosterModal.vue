@@ -57,10 +57,24 @@ function onFileChange(e: Event) {
   if (file) setFile(file)
 }
 
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"]
+
+function onDragOver(e: DragEvent) {
+  e.preventDefault()
+  if (!e.dataTransfer) return
+  const fileType = e.dataTransfer.items[0]?.type
+  if (ALLOWED_TYPES.includes(fileType)) {
+    e.dataTransfer.dropEffect = "copy"
+    isDragging.value = true
+  } else {
+    e.dataTransfer.dropEffect = "none"
+  }
+}
+
 function onDrop(e: DragEvent) {
   isDragging.value = false
   const file = e.dataTransfer?.files?.[0]
-  if (file?.type.startsWith("image/")) setFile(file)
+  if (file && ALLOWED_TYPES.includes(file.type)) setFile(file)
 }
 
 function setFile(file: File) {
@@ -200,7 +214,7 @@ watch(
               ? 'border-primary-500 bg-primary-500/10'
               : 'border-neutral-700 hover:border-neutral-500 bg-neutral-800/40'
           "
-          @dragover.prevent="isDragging = true"
+          @dragover="onDragOver"
           @dragleave="isDragging = false"
           @drop.prevent="onDrop"
         >
@@ -211,7 +225,12 @@ watch(
             </p>
             <p class="text-xs text-neutral-500 mt-1">JPG, PNG, WEBP</p>
           </div>
-          <input type="file" accept="image/*" class="sr-only" @change="onFileChange" />
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            class="sr-only"
+            @change="onFileChange"
+          />
         </label>
       </div>
 
