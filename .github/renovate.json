@@ -1,15 +1,9 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended"
-  ],
+  "extends": ["config:recommended"],
   "timezone": "Europe/Paris",
-  "schedule": [
-    "after 7am and before 10am"
-  ],
-  "addLabels": [
-    "dependencies"
-  ],
+  "schedule": ["after 7am and before 10am"],
+  "addLabels": ["dependencies"],
   "semanticCommitType": "chore",
   "prConcurrentLimit": 0,
   "prHourlyLimit": 0,
@@ -21,94 +15,59 @@
     "gomod",
     "npm"
   ],
-  "postUpdateOptions": [
-    "gomodTidy",
-    "gomodUpdateImportPaths",
-    "npmDedupe"
-  ],
+  "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths", "npmDedupe"],
   "packageRules": [
     {
       "description": "Group all Dockerfile base image updates (multi-stage)",
-      "matchManagers": [
-        "dockerfile"
-      ],
+      "matchManagers": ["dockerfile"],
       "groupName": "dockerfile",
       "automerge": false
     },
     {
       "description": "Auto-merge and group Go patch updates",
-      "matchManagers": [
-        "gomod"
-      ],
-      "matchUpdateTypes": [
-        "patch"
-      ],
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["patch"],
       "groupName": "go patch",
       "automerge": true
     },
     {
       "description": "Auto-merge Go minor updates (separate PRs)",
-      "matchManagers": [
-        "gomod"
-      ],
-      "matchUpdateTypes": [
-        "minor"
-      ],
-      "automerge": true
-    },
-    {
-      "description": "Auto-merge golangci-lint patch updates",
-      "matchManagers": [
-        "github-actions"
-      ],
-      "matchPackageNames": [
-        "golangci/golangci-lint"
-      ],
-      "matchUpdateTypes": [
-        "patch"
-      ],
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor"],
       "automerge": true
     },
     {
       "description": "Group all GitHub Actions updates",
-      "matchManagers": [
-        "github-actions"
-      ],
+      "matchManagers": ["github-actions"],
       "groupName": "github actions",
       "automerge": false
     },
     {
+      "description": "Auto-merge golangci-lint patch updates",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["golangci/golangci-lint-action"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true
+    },
+    {
       "description": "Auto-merge npm patch updates",
-      "matchManagers": [
-        "npm"
-      ],
-      "matchUpdateTypes": [
-        "patch"
-      ],
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["patch"],
       "groupName": "npm patch",
       "automerge": true
     },
     {
       "description": "npm minor and major updates are separate PRs",
-      "matchManagers": [
-        "npm"
-      ],
-      "matchUpdateTypes": [
-        "minor",
-        "major"
-      ],
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "major"],
       "automerge": false
     }
   ],
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": [
-        "/README\\.md/"
-      ],
-      "matchStrings": [
-        "go-(?<currentValue>[\\d\\.]+)-00ADD8"
-      ],
+      "managerFilePatterns": ["/README\\.md/"],
+      "matchStrings": ["go-(?<currentValue>[\\d\\.]+)-00ADD8"],
       "depNameTemplate": "go",
       "datasourceTemplate": "golang-version"
     }
