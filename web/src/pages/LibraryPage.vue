@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue"
+import { isAllowedPosterMimeType } from "@/utils/poster"
 import type { DropdownMenuItem } from "@nuxt/ui"
 import { useRoute, useRouter } from "vue-router"
 import { useToast } from "@nuxt/ui/composables/useToast"
@@ -103,7 +104,7 @@ const settings = ref({ autoResize: true, resizeWidth: 1000 })
 
 async function resizeIfNeeded(file: File): Promise<Blob> {
   if (!settings.value.autoResize) return file
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const img = new Image()
     const url = URL.createObjectURL(file)
     img.onload = () => {
@@ -121,6 +122,10 @@ async function resizeIfNeeded(file: File): Promise<Blob> {
       ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
       canvas.toBlob((blob) => resolve(blob ?? file), file.type, 0.9)
     }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error("Failed to load image for resizing"))
+    }
     img.src = url
   })
 }
@@ -128,13 +133,10 @@ async function resizeIfNeeded(file: File): Promise<Blob> {
 const uploadingKeys = ref(new Set<string>())
 
 const isDraggingFileOnPage = ref(false)
-const DRAG_ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"]
 
 function onDocumentDragEnter(e: DragEvent) {
-  const item = e.dataTransfer?.items[0]
-  if (item?.kind === "file" && DRAG_ALLOWED_TYPES.includes(item.type)) {
-    isDraggingFileOnPage.value = true
-  }
+  const item = Array.from(e.dataTransfer?.items ?? []).find((i) => i.kind === "file")
+  if (item && isAllowedPosterMimeType(item.type)) isDraggingFileOnPage.value = true
 }
 
 function onDocumentDragLeave(e: DragEvent) {
