@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue"
+import { ref, computed, watch, onMounted, onUnmounted } from "vue"
 import type { DropdownMenuItem } from "@nuxt/ui"
 import { useRoute, useRouter } from "vue-router"
 import { useToast } from "@nuxt/ui/composables/useToast"
@@ -99,6 +99,71 @@ const page = computed<number>({
     }),
 })
 
+const settings = ref({ autoResize: true, resizeWidth: 1000 })
+
+async function resizeIfNeeded(file: File): Promise<Blob> {
+  if (!settings.value.autoResize) return file
+  return new Promise((resolve) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const targetWidth = settings.value.resizeWidth
+      if (img.width <= targetWidth) {
+        resolve(file)
+        return
+      }
+      const targetHeight = Math.round((targetWidth * 3) / 2)
+      const canvas = document.createElement("canvas")
+      canvas.width = targetWidth
+      canvas.height = targetHeight
+      const ctx = canvas.getContext("2d")!
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
+      canvas.toBlob((blob) => resolve(blob ?? file), file.type, 0.9)
+    }
+    img.src = url
+  })
+}
+
+const uploadingKeys = ref(new Set<string>())
+
+const isDraggingFileOnPage = ref(false)
+const DRAG_ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"]
+
+function onDocumentDragEnter(e: DragEvent) {
+  const item = e.dataTransfer?.items[0]
+  if (item?.kind === "file" && DRAG_ALLOWED_TYPES.includes(item.type)) {
+    isDraggingFileOnPage.value = true
+  }
+}
+
+function onDocumentDragLeave(e: DragEvent) {
+  if (!e.relatedTarget) isDraggingFileOnPage.value = false
+}
+
+function onDocumentDragOver(e: DragEvent) {
+  e.preventDefault()
+}
+
+function onDocumentDrop(e: DragEvent) {
+  e.preventDefault()
+  isDraggingFileOnPage.value = false
+}
+
+onMounted(() => {
+  document.addEventListener("dragenter", onDocumentDragEnter)
+  document.addEventListener("dragleave", onDocumentDragLeave)
+  document.addEventListener("dragover", onDocumentDragOver)
+  document.addEventListener("drop", onDocumentDrop)
+})
+
+onUnmounted(() => {
+  document.removeEventListener("dragenter", onDocumentDragEnter)
+  document.removeEventListener("dragleave", onDocumentDragLeave)
+  document.removeEventListener("dragover", onDocumentDragOver)
+  document.removeEventListener("drop", onDocumentDrop)
+})
+
 const loading = ref(false)
 const backendError = ref(false)
 const importModalOpen = ref(false)
@@ -163,10 +228,17 @@ const plexConfigured = ref<boolean | null>(null)
 onMounted(async () => {
   loading.value = true
   try {
-    const [statusRes, mediaRes] = await Promise.all([
+    const [statusRes, mediaRes, settingsRes] = await Promise.all([
       fetch("/api/plex/status"),
       fetch("/api/media"),
+      fetch("/api/settings"),
     ])
+
+    if (settingsRes.ok) {
+      const data = await settingsRes.json()
+      settings.value.autoResize = data.auto_resize ?? true
+      settings.value.resizeWidth = data.resize_width ?? 1000
+    }
 
     if (mediaRes.status >= 500) {
       backendError.value = true
@@ -270,15 +342,38 @@ function onUploaded(payload: { ratingKey: string; thumb: string }) {
   if (item) {
     item.thumb = cacheBusted
     item.locallyModified = true
-  }
-  if (selectedItem.value && selectedItem.value.ratingKey === payload.ratingKey) {
     queueStore.addItem({
-      ratingKey: payload.ratingKey,
-      title: selectedItem.value.title,
-      type: selectedItem.value.type,
-      seasonNumber: selectedItem.value.seasonNumber,
+      ratingKey: item.ratingKey,
+      title: item.title,
+      type: item.type,
+      seasonNumber: item.seasonNumber,
       thumb: cacheBusted,
     })
+  }
+}
+
+async function onDropFile(item: MediaItem, file: File) {
+  uploadingKeys.value = new Set(uploadingKeys.value).add(item.ratingKey)
+  try {
+    const blob = await resizeIfNeeded(file)
+    const formData = new FormData()
+    formData.append("file", blob, file.name)
+    const res = await fetch(`/api/media/${item.ratingKey}/upload`, {
+      method: "POST",
+      body: formData,
+    })
+    if (res.ok) {
+      const data = await res.json()
+      onUploaded({ ratingKey: item.ratingKey, thumb: data.thumb })
+    } else {
+      toast.add({ title: "Upload failed", color: "error", icon: "i-lucide-circle-x" })
+    }
+  } catch {
+    toast.add({ title: "Upload failed", color: "error", icon: "i-lucide-circle-x" })
+  } finally {
+    const next = new Set(uploadingKeys.value)
+    next.delete(item.ratingKey)
+    uploadingKeys.value = next
   }
 }
 
@@ -607,6 +702,8 @@ function onSyncOrphaned(ratingKeys: string[]) {
             :thumb="item.thumb"
             :syncing="queueStore.isPushing(item.ratingKey)"
             :pulling="queueStore.isPulling(item.ratingKey)"
+            :uploading="uploadingKeys.has(item.ratingKey)"
+            :file-dragging="isDraggingFileOnPage"
             :in-queue="queueStore.items.some((q) => q.ratingKey === item.ratingKey)"
             :locally-modified="item.locallyModified"
             :is-orphan="item.isOrphan"
@@ -614,6 +711,7 @@ function onSyncOrphaned(ratingKeys: string[]) {
             @send-to-plex="sendToPlex(item)"
             @get-from-plex="getFromPlex(item)"
             @delete-orphan="deleteOrphan(item)"
+            @drop-file="onDropFile(item, $event)"
           />
         </div>
 

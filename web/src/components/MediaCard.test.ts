@@ -1,7 +1,15 @@
-import { render, screen } from "@testing-library/vue"
+import { render, screen, fireEvent, createEvent } from "@testing-library/vue"
 import { userEvent } from "@testing-library/user-event"
 import { describe, it, expect } from "vitest"
 import MediaCard from "./MediaCard.vue"
+
+function drop(element: Element, file: File) {
+  const event = createEvent.drop(element)
+  Object.defineProperty(event, "dataTransfer", {
+    value: { files: [file], items: [{ type: file.type, kind: "file" }] },
+  })
+  return fireEvent(element, event)
+}
 
 const stubs = {
   UIcon: { template: "<span />" },
@@ -109,5 +117,67 @@ describe("MediaCard", () => {
     })
 
     expect(screen.getByText(label)).toBeInTheDocument()
+  })
+
+  it("shows Uploading overlay when uploading prop is true", () => {
+    render(MediaCard, {
+      props: { title: "Inception", type: "movie", thumb: "/posters/1.jpg", uploading: true },
+      global: { stubs },
+    })
+
+    expect(screen.getByText("Uploading…")).toBeInTheDocument()
+  })
+
+  describe("drag and drop", () => {
+    it("emits dropFile when a valid image is dropped", async () => {
+      const { emitted } = render(MediaCard, {
+        props: { title: "Inception", type: "movie", thumb: "/posters/1.jpg" },
+        global: { stubs },
+      })
+
+      const posterDiv = screen.getByRole("img", { name: "Inception" }).parentElement!
+      await drop(posterDiv, new File([""], "poster.jpg", { type: "image/jpeg" }))
+
+      expect(emitted("dropFile")).toHaveLength(1)
+    })
+
+    it.each(["image/jpeg", "image/png", "image/webp"])(
+      "emits dropFile for allowed type %s",
+      async (mimeType) => {
+        const { emitted } = render(MediaCard, {
+          props: { title: "Inception", type: "movie", thumb: "/posters/1.jpg" },
+          global: { stubs },
+        })
+
+        const posterDiv = screen.getByRole("img", { name: "Inception" }).parentElement!
+        await drop(posterDiv, new File([""], "poster", { type: mimeType }))
+
+        expect(emitted("dropFile")).toHaveLength(1)
+      }
+    )
+
+    it("does not emit dropFile for disallowed file types", async () => {
+      const { emitted } = render(MediaCard, {
+        props: { title: "Inception", type: "movie", thumb: "/posters/1.jpg" },
+        global: { stubs },
+      })
+
+      const posterDiv = screen.getByRole("img", { name: "Inception" }).parentElement!
+      await drop(posterDiv, new File([""], "anim.gif", { type: "image/gif" }))
+
+      expect(emitted("dropFile")).toBeUndefined()
+    })
+
+    it("does not emit dropFile when card is orphaned", async () => {
+      const { emitted } = render(MediaCard, {
+        props: { title: "Inception", type: "movie", thumb: "/posters/1.jpg", isOrphan: true },
+        global: { stubs },
+      })
+
+      const posterDiv = screen.getByRole("img", { name: "Inception" }).parentElement!
+      await drop(posterDiv, new File([""], "poster.jpg", { type: "image/jpeg" }))
+
+      expect(emitted("dropFile")).toBeUndefined()
+    })
   })
 })

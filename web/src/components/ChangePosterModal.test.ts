@@ -1,5 +1,5 @@
 /* eslint-disable vue/require-default-prop */
-import { render, screen, cleanup } from "@testing-library/vue"
+import { render, screen, cleanup, fireEvent, createEvent } from "@testing-library/vue"
 import { userEvent } from "@testing-library/user-event"
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { defineComponent } from "vue"
@@ -71,6 +71,29 @@ describe("ChangePosterModal", () => {
     const { emitted } = renderModal()
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }))
     expect(emitted("update:open")).toEqual([[false]])
+  })
+
+  describe("Upload tab — drag and drop", () => {
+    function dropOnZone(file: File) {
+      const label = screen.getByText(/Drop an image here/).closest("label")!
+      const event = createEvent.drop(label)
+      Object.defineProperty(event, "dataTransfer", {
+        value: { files: [file], items: [{ type: file.type, kind: "file" }] },
+      })
+      return fireEvent(label, event)
+    }
+
+    it("accepts jpeg files on drop and enables Apply", async () => {
+      renderModal()
+      await dropOnZone(new File([""], "poster.jpg", { type: "image/jpeg" }))
+      expect(screen.getByRole("button", { name: "Apply" })).not.toBeDisabled()
+    })
+
+    it("rejects gif files on drop and keeps Apply disabled", async () => {
+      renderModal()
+      await dropOnZone(new File([""], "anim.gif", { type: "image/gif" }))
+      expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled()
+    })
   })
 
   describe("From URL tab", () => {
