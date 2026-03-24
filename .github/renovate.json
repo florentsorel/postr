@@ -57,6 +57,19 @@
       "automerge": true
     },
     {
+      "description": "Auto-merge golangci-lint patch updates",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchPackageNames": [
+        "golangci/golangci-lint"
+      ],
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "automerge": true
+    },
+    {
       "description": "Group all GitHub Actions updates",
       "matchManagers": [
         "github-actions"
@@ -88,16 +101,6 @@
     }
   ],
   "customManagers": [
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "/.github\\/workflows\\/.*\\.yml/"
-      ],
-      "matchStrings": [
-        "\\s*uses: (?<depName>.*?)-action@v\\d\\s*with:\\s*version:\\s*(?<currentValue>.*)"
-      ],
-      "datasourceTemplate": "github-releases"
-    },
     {
       "customType": "regex",
       "managerFilePatterns": [
