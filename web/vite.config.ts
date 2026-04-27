@@ -69,5 +69,14 @@ export default defineConfig({
     environment: "happy-dom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
+    // @vue/test-utils >= 2.4.7 registers `attachTo.removeChild(el)` in
+    // onUnmount, but @testing-library/vue@8.1.0's `render` strips that
+    // wrapper via `unwrapNode` right after mount — so VTU's onUnmount
+    // throws "The node to be removed is not a child of this node" during
+    // the auto-cleanup, marking every test as failed. Skip auto-cleanup
+    // and clear `document.body` ourselves in setup.ts.
+    env: {
+      VTL_SKIP_AUTO_CLEANUP: "true",
+    },
   },
 })

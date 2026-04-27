@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom"
-import { vi } from "vitest"
+import { vi, afterEach } from "vitest"
 import { config } from "@vue/test-utils"
 import { createRouter, createMemoryHistory } from "vue-router"
 import ui from "@nuxt/ui/vue-plugin"
@@ -49,3 +49,11 @@ config.global.stubs = {
   UTooltip: { template: "<slot />" },
   Tooltip: { template: "<slot />" },
 }
+
+// @vue/test-utils >= 2.4.7 registers `attachTo.removeChild(el)` in onUnmount,
+// but @testing-library/vue@8.1.0's `render` unwraps that element right after
+// mount. The mismatched cleanup throws and leaves the DOM populated, polluting
+// the next test. Wipe the body explicitly to keep tests isolated.
+afterEach(() => {
+  document.body.innerHTML = ""
+})
