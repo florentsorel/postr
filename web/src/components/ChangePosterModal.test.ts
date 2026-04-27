@@ -1,7 +1,7 @@
 /* eslint-disable vue/require-default-prop */
-import { render, screen, cleanup, fireEvent, createEvent } from "@testing-library/vue"
+import { render, screen, fireEvent, createEvent } from "@testing-library/vue"
 import { userEvent } from "@testing-library/user-event"
-import { describe, it, expect, vi, afterEach } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { defineComponent } from "vue"
 import ChangePosterModal from "./ChangePosterModal.vue"
 
@@ -23,8 +23,6 @@ vi.mock("@nuxt/ui/runtime/components/Modal.vue", () => ({
     template: `<div><p v-if="title">{{ title }}</p><p v-if="description">{{ description }}</p><slot name="body" /><slot name="footer" /></div>`,
   }),
 }))
-
-afterEach(cleanup)
 
 const defaultItem = {
   id: 1,
