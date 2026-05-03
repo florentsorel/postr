@@ -3,8 +3,8 @@ module github.com/florentsorel/postr
 go 1.26.1
 
 require (
-	github.com/caarlos0/env/v11 v11.4.0
-	github.com/labstack/echo/v5 v5.1.0
+	github.com/caarlos0/env/v11 v11.4.1
+	github.com/labstack/echo/v5 v5.1.1
 	github.com/lmittmann/tint v1.1.3
 	github.com/pressly/goose/v3 v3.27.1
 	golang.org/x/sync v0.20.0
