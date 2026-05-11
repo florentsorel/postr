@@ -1,6 +1,6 @@
 module github.com/florentsorel/postr
 
-go 1.26.1
+go 1.26.3
 
 require (
 	github.com/caarlos0/env/v11 v11.4.1
