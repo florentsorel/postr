@@ -24,6 +24,13 @@
       "automerge": false
     },
     {
+      "description": "Group Go version updates across go.mod, Dockerfile and README into a single PR",
+      "matchPackageNames": ["go", "golang"],
+      "matchDatasources": ["golang-version", "docker"],
+      "groupName": "go version",
+      "automerge": false
+    },
+    {
       "description": "Auto-merge and group Go patch updates",
       "matchManagers": ["gomod"],
       "matchUpdateTypes": ["patch"],
@@ -68,6 +75,13 @@
       "customType": "regex",
       "managerFilePatterns": ["/README\\.md/"],
       "matchStrings": ["go-(?<currentValue>[\\d\\.]+)-00ADD8"],
+      "depNameTemplate": "go",
+      "datasourceTemplate": "golang-version"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/go\\.mod/"],
+      "matchStrings": ["\\ngo (?<currentValue>\\d+\\.\\d+\\.\\d+)\\n"],
       "depNameTemplate": "go",
       "datasourceTemplate": "golang-version"
     }
