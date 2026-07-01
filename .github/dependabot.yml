@@ -83,3 +83,16 @@ updates:
       - dependency-name: "*"
         update-types:
           - "version-update:semver-patch"
+    groups:
+      docker-minor:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+      docker-major:
+        applies-to: version-updates
+        update-types:
+          - "major"
+      docker-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
