@@ -31,10 +31,16 @@
       "automerge": false
     },
     {
-      "description": "Group and auto-merge Go patch and minor updates",
+      "description": "Auto-merge and group Go patch updates",
       "matchManagers": ["gomod"],
-      "matchUpdateTypes": ["patch", "minor"],
-      "groupName": "go patch and minor",
+      "matchUpdateTypes": ["patch"],
+      "groupName": "go patch",
+      "automerge": true
+    },
+    {
+      "description": "Auto-merge Go minor updates (separate PRs)",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor"],
       "automerge": true
     },
     {
