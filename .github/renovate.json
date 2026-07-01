@@ -64,9 +64,16 @@
       "automerge": true
     },
     {
-      "description": "npm minor and major updates are separate PRs",
+      "description": "Group npm minor updates into a single PR",
       "matchManagers": ["npm"],
-      "matchUpdateTypes": ["minor", "major"],
+      "matchUpdateTypes": ["minor"],
+      "groupName": "npm minor",
+      "automerge": false
+    },
+    {
+      "description": "npm major updates are separate PRs",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["major"],
       "automerge": false
     }
   ],
