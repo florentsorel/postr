@@ -57,10 +57,16 @@
       "automerge": true
     },
     {
-      "description": "Group and auto-merge npm patch and minor updates",
+      "description": "Auto-merge and group npm patch updates",
       "matchManagers": ["npm"],
-      "matchUpdateTypes": ["patch", "minor"],
-      "groupName": "npm patch and minor",
+      "matchUpdateTypes": ["patch"],
+      "groupName": "npm patch",
+      "automerge": true
+    },
+    {
+      "description": "Auto-merge npm minor updates (separate PRs)",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor"],
       "automerge": true
     },
     {
