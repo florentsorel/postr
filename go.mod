@@ -7,7 +7,7 @@ require (
 	github.com/labstack/echo/v5 v5.2.1
 	github.com/lmittmann/tint v1.1.3
 	github.com/pressly/goose/v3 v3.27.2
-	golang.org/x/sync v0.21.0
+	golang.org/x/sync v0.22.0
 	modernc.org/sqlite v1.53.0
 )
 
