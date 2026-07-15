@@ -4,7 +4,7 @@ go 1.26.5
 
 require (
 	github.com/caarlos0/env/v11 v11.4.1
-	github.com/labstack/echo/v5 v5.2.1
+	github.com/labstack/echo/v5 v5.3.0
 	github.com/lmittmann/tint v1.1.3
 	github.com/pressly/goose/v3 v3.27.2
 	golang.org/x/sync v0.22.0
@@ -21,7 +21,7 @@ require (
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/time v0.14.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	modernc.org/libc v1.73.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
