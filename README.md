@@ -35,7 +35,7 @@ Designed for homelab deployment via Docker. Inspired by [Posteria](https://githu
 - **Plex or Jellyfin** — Point Postr at either server; every label, action and error message follows the one you configured.
 - **Import** — Fetch your entire library and download all posters locally. Real-time progress via SSE with a detailed recap (added, skipped, deleted).
 - **Sync** — Detect posters that have changed directly on your server and update your local copies. Skips items you have modified locally.
-- **Upload posters** — Drag & drop an image file or paste a direct URL. Optional auto-resize to poster-friendly dimensions.
+- **Upload posters** — Drag & drop an image file or paste a direct image URL, including poster sites such as ThePosterDB. Optional auto-resize to poster-friendly dimensions, applied server-side to both.
 - **Push to your server** — Queue poster changes locally and push them one by one or all at once.
 - **Restore** — Revert any locally modified poster back to the version currently on your server.
 - **Orphaned items** — Items no longer found on your server are automatically flagged and can be cleaned up from a dedicated tab.

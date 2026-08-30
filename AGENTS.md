@@ -127,8 +127,8 @@ Each media card exposes actions on hover:
 
 **a) Change Poster**
 - Opens a modal with two tabs:
-  - **Upload** — user uploads an image file directly (drag & drop or browse). Auto-resize to poster-friendly dimensions (configurable).
-  - **From URL** — user pastes a direct image URL (JPG, PNG, WEBP). The server fetches the image server-side to avoid CORS issues.
+  - **Upload** — user uploads an image file directly (drag & drop or browse).
+  - **From URL** — user pastes a direct image URL (JPG, PNG, WEBP). The server fetches the image to avoid CORS issues. See below — several poster sites need care.
 - Once confirmed, the new poster is saved locally and queued for push to the server.
 
 **b) Send to {server}**
@@ -140,6 +140,24 @@ Each media card exposes actions on hover:
 - Re-downloads the poster currently set on the server and overwrites the local copy.
 - Only visible on cards where the local poster has been locally modified (differs from the server).
 - Pings the server first: config errors return an error toast and keep the item in the queue. On a 404, the item is marked as orphan.
+
+### 3.1 Fetching a poster from a URL
+
+`fetchRemotePoster` in `internal/handler/media.go` exists because the obvious implementation fails in ways that are silent rather than loud:
+
+- **Identify yourself.** Go's default `Go-http-client/1.1` is rejected outright by the bot protection in front of several poster sites — ThePosterDB answers `403`. Any real name gets through, so `posterFetchUserAgent` names Postr honestly rather than impersonating a browser.
+- **Never truncate.** The read is capped at `maxPosterBytes` (32 MB) by reading *one byte past* it and refusing when that byte arrives. The previous 10 MB `io.LimitReader` silently cut an 11 MB poster in half and stored the corrupt result.
+- **Trust the bytes, not the URL.** A path ending in `.jpg` proves nothing: an HTML error page served under a `200` used to be stored as a poster and pushed to the media server. The extension comes from `Content-Type`, then the `Content-Disposition` filename (poster sites serve extension-less asset URLs), then `http.DetectContentType`. Anything that is not JPEG/PNG/WEBP is refused.
+- **Time out.** `http.DefaultClient` has no timeout; a host that accepts the connection then stalls would hang the request indefinitely.
+
+### 3.2 Resizing
+
+`posters.Resize` scales user-supplied artwork down to the configured width, wired into `storePoster` — the single funnel both the file and URL paths go through. **Import and sync do not pass through it**: what the media server holds is stored verbatim, or byte-comparison would report a change on every sync.
+
+- An image already at or below the target is returned byte-for-byte; re-encoding it would cost quality for nothing.
+- PNG stays PNG. WEBP comes back as **JPEG** — the Go ecosystem has a WEBP decoder but no encoder — which is why `storePoster` returns the extension it actually stored instead of the one it was handed.
+- A decode failure logs and stores the original rather than rejecting the upload.
+- The browser also resizes dropped files via canvas before uploading. That is now a bandwidth optimization rather than the only line of defence: the server enforces the setting either way.
 
 ### 4. Queue
 
@@ -164,7 +182,7 @@ Each media card exposes actions on hover:
 Two categories of settings:
 
 **Editable (stored in SQLite):**
-- Option to enable/disable automatic image resizing on upload, and target width
+- Option to enable/disable automatic image resizing on upload, and target width (seeded **off**)
 - Per-library enable/disable toggle (which server libraries are included in imports), scoped to the active provider
 
 **Read-only (from environment variables, displayed in UI but not editable):**
