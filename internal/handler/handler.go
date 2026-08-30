@@ -1,35 +1,37 @@
 package handler
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 
 	"github.com/florentsorel/postr/internal/config"
 	"github.com/florentsorel/postr/internal/db"
-	"github.com/florentsorel/postr/internal/plex"
+	"github.com/florentsorel/postr/internal/mediaserver"
 	"github.com/labstack/echo/v5"
 )
 
-// PlexClient is the subset of plex.Client operations used by the handler.
-type PlexClient interface {
-	Sections(ctx context.Context) ([]plex.Section, error)
-	AllItems(ctx context.Context, sectionKey string) ([]plex.Item, error)
-	Children(ctx context.Context, ratingKey string) ([]plex.Item, error)
-	Collections(ctx context.Context, sectionKey string) ([]plex.Item, error)
-	DownloadThumb(ctx context.Context, thumbPath string) ([]byte, string, error)
-	UploadPoster(ctx context.Context, ratingKey string, data []byte, contentType string) error
-}
-
 type Handler struct {
-	db       *db.Queries
-	config   *config.Config
-	plex     PlexClient
+	db     *db.Queries
+	config *config.Config
+	// server is the active media server client, or nil when none is configured.
+	server   mediaserver.Client
 	sessions *sessionStore
 }
 
-func New(queries *db.Queries, cfg *config.Config, plexClient PlexClient) *Handler {
-	return &Handler{db: queries, config: cfg, plex: plexClient, sessions: newSessionStore()}
+func New(queries *db.Queries, cfg *config.Config, client mediaserver.Client) *Handler {
+	return &Handler{db: queries, config: cfg, server: client, sessions: newSessionStore()}
+}
+
+// provider returns the identifier of the active media server, used to scope
+// every database read to the data imported from that server.
+func (h *Handler) provider() string {
+	return h.config.MediaServer
+}
+
+// serverName returns the display name of the active media server, for use in
+// user-facing messages.
+func (h *Handler) serverName() string {
+	return h.config.ServerName()
 }
 
 type errorResponse struct {

@@ -7,6 +7,7 @@ const activeCardId = ref<symbol | null>(null)
 import { computed, watch } from "vue"
 import { useToast } from "@nuxt/ui/composables/useToast"
 import { isAllowedPosterMimeType } from "@/utils/poster"
+import { useServerStore } from "@/stores/useServerStore"
 
 type MediaType = "movie" | "show" | "season" | "collection"
 
@@ -65,12 +66,14 @@ watch(
   }
 )
 
-type EmitName = "changePoster" | "sendToPlex" | "getFromPlex" | "deleteOrphan"
+const server = useServerStore()
+
+type EmitName = "changePoster" | "sendToServer" | "getFromServer" | "deleteOrphan"
 
 const emit = defineEmits<{
   changePoster: []
-  sendToPlex: []
-  getFromPlex: []
+  sendToServer: []
+  getFromServer: []
   deleteOrphan: []
   dropFile: [file: File]
 }>()
@@ -106,7 +109,7 @@ function onDrop(e: DragEvent) {
   if (props.isOrphan) {
     toast.add({
       title: "Item is orphaned",
-      description: "This item no longer exists in Plex and cannot be updated.",
+      description: `This item no longer exists in ${server.name} and cannot be updated.`,
       color: "warning",
       icon: "i-lucide-unlink",
     })
@@ -252,9 +255,9 @@ const typeLabel: Record<MediaType, string> = {
             variant="outline"
             color="neutral"
             block
-            @click.stop="action('sendToPlex')"
+            @click.stop="action('sendToServer')"
           >
-            Send to Plex
+            Send to {{ server.name }}
           </UButton>
           <UButton
             v-if="locallyModified"
@@ -263,9 +266,9 @@ const typeLabel: Record<MediaType, string> = {
             variant="outline"
             color="neutral"
             block
-            @click.stop="action('getFromPlex')"
+            @click.stop="action('getFromServer')"
           >
-            Get from Plex
+            Get from {{ server.name }}
           </UButton>
         </template>
       </div>
@@ -280,10 +283,10 @@ const typeLabel: Record<MediaType, string> = {
         >
           {{ title }}
         </p>
-        <UTooltip v-if="inQueue && !isOrphan" text="Pending push to Plex">
+        <UTooltip v-if="inQueue && !isOrphan" :text="`Pending push to ${server.name}`">
           <UIcon name="i-lucide-upload" class="w-3.5 h-3.5 text-primary-400 shrink-0" />
         </UTooltip>
-        <UTooltip v-if="isOrphan" text="No longer in Plex">
+        <UTooltip v-if="isOrphan" :text="`No longer in ${server.name}`">
           <UIcon name="i-lucide-unlink" class="w-3.5 h-3.5 text-neutral-600 shrink-0" />
         </UTooltip>
       </div>

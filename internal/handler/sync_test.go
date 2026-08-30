@@ -23,11 +23,11 @@ type syncResult struct {
 func runSync(t *testing.T, h *handler.Handler) syncResult {
 	t.Helper()
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/api/plex/sync", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/server/sync", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	if err := h.SyncFromPlex(c); err != nil {
-		t.Fatalf("SyncFromPlex: %v", err)
+	if err := h.SyncFromServer(c); err != nil {
+		t.Fatalf("SyncFromServer: %v", err)
 	}
 	return parseSyncSSE(t, rec.Body.Bytes())
 }
@@ -56,22 +56,22 @@ func parseSyncSSE(t *testing.T, body []byte) syncResult {
 	return result
 }
 
-func TestSyncFromPlex_NoPlex(t *testing.T) {
+func TestSyncFromServer_NoServer(t *testing.T) {
 	setup := newTestSetup(t, nil)
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/api/plex/sync", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/server/sync", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	if err := setup.handler.SyncFromPlex(c); err != nil {
-		t.Fatalf("SyncFromPlex: %v", err)
+	if err := setup.handler.SyncFromServer(c); err != nil {
+		t.Fatalf("SyncFromServer: %v", err)
 	}
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status: want %d, got %d", http.StatusBadRequest, rec.Code)
 	}
 }
 
-func TestSyncFromPlex_EmptyDB(t *testing.T) {
+func TestSyncFromServer_EmptyDB(t *testing.T) {
 	setup := newTestSetup(t, defaultMock())
 	result := runSync(t, setup.handler)
 
@@ -83,7 +83,7 @@ func TestSyncFromPlex_EmptyDB(t *testing.T) {
 	}
 }
 
-func TestSyncFromPlex_AllUnchanged(t *testing.T) {
+func TestSyncFromServer_AllUnchanged(t *testing.T) {
 	setup := newTestSetup(t, defaultMock())
 	runImport(t, setup.handler, importBody)
 
@@ -101,14 +101,14 @@ func TestSyncFromPlex_AllUnchanged(t *testing.T) {
 	}
 }
 
-func TestSyncFromPlex_OneChanged(t *testing.T) {
+func TestSyncFromServer_OneChanged(t *testing.T) {
 	mock := defaultMock()
 	setup := newTestSetup(t, mock)
 	runImport(t, setup.handler, importBody)
 
-	// Return different poster bytes for item 101 to simulate a Plex-side change.
-	mock.downloadThumbFunc = func(_ context.Context, thumbPath string) ([]byte, string, error) {
-		if strings.Contains(thumbPath, "101") {
+	// Return different poster bytes for item 101 to simulate a server-side change.
+	mock.downloadFunc = func(_ context.Context, itemID string) ([]byte, string, error) {
+		if itemID == "101" {
 			return []byte("updated-poster"), "jpg", nil
 		}
 		return []byte("fake-poster"), "jpg", nil
@@ -127,7 +127,7 @@ func TestSyncFromPlex_OneChanged(t *testing.T) {
 	}
 }
 
-func TestSyncFromPlex_SkipsLocallyModified(t *testing.T) {
+func TestSyncFromServer_SkipsLocallyModified(t *testing.T) {
 	mock := defaultMock()
 	setup := newTestSetup(t, mock)
 	runImport(t, setup.handler, importBody)
@@ -139,7 +139,7 @@ func TestSyncFromPlex_SkipsLocallyModified(t *testing.T) {
 	// We trigger this by running a sync where 101 gets a changed poster, which sets locally_modified=0,
 	// then upload a poster for 101, then verify sync only checks 1 item (102).
 	// For now assert the baseline: both items are checked (locally_modified=0 after import).
-	mock.downloadThumbFunc = func(_ context.Context, thumbPath string) ([]byte, string, error) {
+	mock.downloadFunc = func(_ context.Context, itemID string) ([]byte, string, error) {
 		return []byte("updated-poster"), "jpg", nil
 	}
 

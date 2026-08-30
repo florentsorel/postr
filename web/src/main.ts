@@ -8,6 +8,7 @@ import LibraryPage from "./pages/LibraryPage.vue"
 import LoginPage from "./pages/LoginPage.vue"
 import SettingsPage from "./pages/SettingsPage.vue"
 import { useAuthStore } from "./stores/useAuthStore"
+import { useServerStore } from "./stores/useServerStore"
 
 const app = createApp(App)
 
@@ -33,6 +34,10 @@ router.beforeEach(async (to) => {
   }
 
   if (authStore.authEnabled && !authStore.authenticated) return { path: "/login", replace: true }
+
+  // Resolve which media server is configured before the first render so every
+  // label ("Import from Jellyfin", "Send to Plex", …) is correct right away.
+  await useServerStore().load()
   return true
 })
 

@@ -1,45 +1,44 @@
 <script setup lang="ts">
+import { computed } from "vue"
+import { useServerStore } from "@/stores/useServerStore"
+
 defineProps<{ open: boolean }>()
 defineEmits<{ "update:open": [value: boolean] }>()
 
-const sections = [
+const server = useServerStore()
+
+const sections = computed(() => [
   {
     icon: "i-lucide-refresh-cw",
-    title: "Import from Plex",
-    description:
-      "Syncs your Plex library into Postr. Downloads posters for all selected media types. Reports how many items were added, skipped (poster unchanged), or deleted. Only visible when a Plex server is configured.",
+    title: `Import from ${server.name}`,
+    description: `Syncs your ${server.name} library into Postr. Downloads posters for all selected media types. Reports how many items were added, skipped (poster unchanged), or deleted. Only visible when a ${server.name} server is configured.`,
   },
   {
     icon: "i-lucide-scan-search",
-    title: "Sync from Plex",
-    description:
-      "Checks whether posters have been updated directly in Plex since your last import. Compares each local poster byte-for-byte and updates any that have changed. Does not add or remove items. Only visible once at least one item has been imported.",
+    title: `Sync from ${server.name}`,
+    description: `Checks whether posters have been updated directly in ${server.name} since your last import. Compares each local poster byte-for-byte and updates any that have changed. Does not add or remove items. Only visible once at least one item has been imported.`,
   },
   {
     icon: "i-lucide-upload-cloud",
     title: "Queue",
-    description:
-      "Lists all posters modified locally that are pending push to Plex. Use the upload icon to push one at a time, or 'Push all to Plex' to sync everything at once. Removing an item from the queue restores the original Plex poster. Only visible when there are pending posters.",
+    description: `Lists all posters modified locally that are pending push to ${server.name}. Use the upload icon to push one at a time, or 'Push all to ${server.name}' to sync everything at once. Removing an item from the queue restores the original ${server.name} poster. Only visible when there are pending posters.`,
   },
   {
     icon: "i-lucide-image",
     title: "Change poster",
-    description:
-      "Replace a poster by uploading a file (drag & drop or browse), pasting a direct image URL, or searching online sources (TMDB, TVDB, Fanart.tv). The new poster is saved locally and queued for push to Plex.",
+    description: `Replace a poster by uploading a file (drag & drop or browse), pasting a direct image URL, or searching online sources (TMDB, TVDB, Fanart.tv). The new poster is saved locally and queued for push to ${server.name}.`,
   },
   {
     icon: "i-lucide-upload",
-    title: "Send to Plex",
-    description:
-      "Pushes your locally modified poster directly to Plex. Only visible on cards that have a pending change (upload icon in the title row).",
+    title: `Send to ${server.name}`,
+    description: `Pushes your locally modified poster directly to ${server.name}. Only visible on cards that have a pending change (upload icon in the title row).`,
   },
   {
     icon: "i-lucide-download",
-    title: "Get from Plex",
-    description:
-      "Re-downloads the poster currently set in Plex and overwrites your local copy. Only visible on cards where your local poster differs from Plex.",
+    title: `Get from ${server.name}`,
+    description: `Re-downloads the poster currently set in ${server.name} and overwrites your local copy. Only visible on cards where your local poster differs from ${server.name}.`,
   },
-]
+])
 </script>
 
 <template>

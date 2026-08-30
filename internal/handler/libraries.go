@@ -1,12 +1,11 @@
 package handler
 
 import (
-	"errors"
 	"log/slog"
 	"net/http"
 
 	postrdb "github.com/florentsorel/postr/internal/db"
-	"github.com/florentsorel/postr/internal/plex"
+	"github.com/florentsorel/postr/internal/mediaserver"
 	"github.com/labstack/echo/v5"
 )
 
@@ -25,21 +24,22 @@ type getLibrariesResponse struct {
 }
 
 func (h *Handler) GetLibraries(c *echo.Context) error {
-	if h.plex == nil {
+	if h.server == nil {
 		return c.JSON(http.StatusOK, getLibrariesResponse{Configured: false})
 	}
 
-	sections, err := h.plex.Sections(c.Request().Context())
+	ctx := c.Request().Context()
+	libs, err := h.server.Libraries(ctx)
 	if err != nil {
-		msg := "Unable to reach Plex server."
-		if errors.Is(err, plex.ErrUnauthorized) {
-			msg = "Invalid Plex token."
-		}
-		return c.JSON(http.StatusOK, getLibrariesResponse{Configured: true, Reachable: false, Error: msg})
+		return c.JSON(http.StatusOK, getLibrariesResponse{
+			Configured: true,
+			Reachable:  false,
+			Error:      h.unreachableMessage(err),
+		})
 	}
 
 	// Load saved enabled states from DB
-	saved, err := h.db.ListLibrarySettings(c.Request().Context())
+	saved, err := h.db.ListLibrarySettings(ctx, h.provider())
 	if err != nil {
 		return jsonInternalError(c, err)
 	}
@@ -49,15 +49,17 @@ func (h *Handler) GetLibraries(c *echo.Context) error {
 	}
 
 	var libraries []libraryItem
-	for _, s := range sections {
-		if s.Type != "movie" && s.Type != "show" {
+	for _, l := range libs {
+		// Collection libraries (Jellyfin box sets) are not user-selectable: they
+		// are imported alongside the movie libraries they belong to.
+		if l.Type != mediaserver.TypeMovie && l.Type != mediaserver.TypeShow {
 			continue
 		}
 		enabled := true
-		if v, ok := enabledByKey[s.Key]; ok {
+		if v, ok := enabledByKey[l.Key]; ok {
 			enabled = v
 		}
-		libraries = append(libraries, libraryItem{Key: s.Key, Title: s.Title, Type: s.Type, Enabled: enabled})
+		libraries = append(libraries, libraryItem{Key: l.Key, Title: l.Title, Type: l.Type, Enabled: enabled})
 	}
 
 	return c.JSON(http.StatusOK, getLibrariesResponse{
@@ -88,7 +90,11 @@ func (h *Handler) SaveLibraries(c *echo.Context) error {
 		if lib.Enabled {
 			enabled = 1
 		}
-		if err := h.db.UpsertLibrarySetting(ctx, postrdb.UpsertLibrarySettingParams{SectionKey: lib.Key, Enabled: enabled}); err != nil {
+		if err := h.db.UpsertLibrarySetting(ctx, postrdb.UpsertLibrarySettingParams{
+			Provider:   h.provider(),
+			SectionKey: lib.Key,
+			Enabled:    enabled,
+		}); err != nil {
 			return jsonInternalError(c, err)
 		}
 		slog.Info("library setting saved", "key", lib.Key, "enabled", lib.Enabled)

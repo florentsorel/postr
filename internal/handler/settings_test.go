@@ -26,19 +26,24 @@ func TestGetSettings(t *testing.T) {
 		}
 
 		type settingsResp struct {
-			PlexURL      string `json:"plex_url"`
-			PlexTokenSet bool   `json:"plex_token_set"`
-			AuthEnabled  bool   `json:"auth_enabled"`
-			AuthUser     string `json:"auth_user"`
-			AuthPassSet  bool   `json:"auth_pass_set"`
+			Provider       string `json:"provider"`
+			ServerName     string `json:"server_name"`
+			ServerURL      string `json:"server_url"`
+			ServerTokenSet bool   `json:"server_token_set"`
+			AuthEnabled    bool   `json:"auth_enabled"`
+			AuthUser       string `json:"auth_user"`
+			AuthPassSet    bool   `json:"auth_pass_set"`
 		}
 		resp := decodeJSON[settingsResp](t, rec.Body.Bytes())
 
-		if resp.PlexURL != "http://plex:32400" {
-			t.Errorf("plex_url: want %q, got %q", "http://plex:32400", resp.PlexURL)
+		if resp.ServerURL != "http://plex:32400" {
+			t.Errorf("server_url: want %q, got %q", "http://plex:32400", resp.ServerURL)
 		}
-		if !resp.PlexTokenSet {
-			t.Error("plex_token_set: want true")
+		if resp.Provider != "plex" || resp.ServerName != "Plex" {
+			t.Errorf("provider/server_name: want plex/Plex, got %s/%s", resp.Provider, resp.ServerName)
+		}
+		if !resp.ServerTokenSet {
+			t.Error("server_token_set: want true")
 		}
 		if !resp.AuthEnabled {
 			t.Error("auth_enabled: want true")

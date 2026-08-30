@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/florentsorel/postr/internal/db"
-	"github.com/florentsorel/postr/internal/plex"
+	"github.com/florentsorel/postr/internal/mediaserver"
 	"github.com/labstack/echo/v5"
 )
 
@@ -56,13 +56,13 @@ type sseErrorEvent struct {
 	Message string `json:"message"`
 }
 
-func (h *Handler) ImportFromPlex(c *echo.Context) error {
+func (h *Handler) ImportFromServer(c *echo.Context) error {
 	var req importRequest
 	if err := c.Bind(&req); err != nil {
 		return jsonError(c, http.StatusBadRequest, "invalid request body")
 	}
-	if h.plex == nil {
-		return jsonError(c, http.StatusBadRequest, "Plex is not configured")
+	if h.server == nil {
+		return jsonError(c, http.StatusBadRequest, h.serverName()+" is not configured")
 	}
 
 	resp := c.Response()
@@ -81,72 +81,57 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 
 	ctx := c.Request().Context()
 
-	slog.Info("import started")
+	slog.Info("import started", "provider", h.provider())
 
-	// Phase 1: fetch all sections and items upfront to know the total.
-	sections, err := h.plex.Sections(ctx)
+	// Phase 1: fetch all libraries and items upfront to know the total.
+	libs, err := h.server.Libraries(ctx)
 	if err != nil {
-		send(sseErrorEvent{Type: "error", Message: "failed to fetch Plex sections: " + err.Error()})
+		send(sseErrorEvent{Type: "error", Message: "failed to fetch " + h.serverName() + " libraries: " + err.Error()})
 		return nil
 	}
-	sectionByKey := make(map[string]plex.Section, len(sections))
-	for _, s := range sections {
-		sectionByKey[s.Key] = s
+	libraryByKey := make(map[string]mediaserver.Library, len(libs))
+	for _, l := range libs {
+		libraryByKey[l.Key] = l
 	}
 
 	type workBatch struct {
-		target     importTarget
-		sectionKey string
-		section    plex.Section
-		items      []plex.Item
+		mediaType  string
+		libraryKey string
+		library    mediaserver.Library
+		items      []mediaserver.Item
 	}
 
 	var batches []workBatch
 	for _, target := range req.Targets {
-		for _, sectionKey := range target.SectionKeys {
-			sec, ok := sectionByKey[sectionKey]
+		sectionKeys := target.SectionKeys
+
+		// Jellyfin keeps every collection in one server-wide folder, so importing
+		// collections once per selected movie library would import them several
+		// times over. Anchor them to that folder instead.
+		if target.Type == mediaserver.TypeCollection && h.server.GlobalCollections() {
+			key, ok := collectionLibraryKey(libs)
 			if !ok {
-				slog.Warn("section not found in Plex", "key", sectionKey)
+				slog.Info("no collection library on server, skipping collections")
+				continue
+			}
+			sectionKeys = []string{key}
+		}
+
+		for _, sectionKey := range sectionKeys {
+			lib, ok := libraryByKey[sectionKey]
+			if !ok {
+				slog.Warn("library not found on server", "key", sectionKey)
 				continue
 			}
 
-			var items []plex.Item
-			switch target.Type {
-			case "movie", "show":
-				items, err = h.plex.AllItems(ctx, sectionKey)
-			case "season":
-				var shows []plex.Item
-				shows, err = h.plex.AllItems(ctx, sectionKey)
-				if err == nil {
-					for _, show := range shows {
-						var seasons []plex.Item
-						seasons, err = h.plex.Children(ctx, show.RatingKey)
-						if err != nil {
-							break
-						}
-						for i := range seasons {
-							seasons[i].Title = show.Title
-							episodes, err := h.plex.Children(ctx, seasons[i].RatingKey)
-							if err == nil && len(episodes) > 0 {
-								seasons[i].Year = episodes[0].SeasonYear()
-							} else {
-								seasons[i].Year = show.Year
-							}
-						}
-						items = append(items, seasons...)
-					}
-				}
-			case "collection":
-				items, err = h.plex.Collections(ctx, sectionKey)
-			}
-
+			items, err := h.server.Items(ctx, sectionKey, target.Type)
 			if err != nil {
-				send(sseErrorEvent{Type: "error", Message: "failed to fetch items for section " + sec.Title + ": " + err.Error()})
+				send(sseErrorEvent{Type: "error", Message: "failed to fetch items for library " + lib.Title + ": " + err.Error()})
 				return nil
 			}
 
-			slog.Info("fetching items from Plex", "library", sec.Title, "type", target.Type, "count", len(items))
-			batches = append(batches, workBatch{target, sectionKey, sec, items})
+			slog.Info("fetching items", "library", lib.Title, "type", target.Type, "count", len(items))
+			batches = append(batches, workBatch{target.Type, sectionKey, lib, items})
 		}
 	}
 
@@ -161,24 +146,25 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 	current := 0
 
 	for _, batch := range batches {
-		slog.Info("importing library", "library", batch.section.Title, "type", batch.target.Type, "total", len(batch.items))
+		slog.Info("importing library", "library", batch.library.Title, "type", batch.mediaType, "total", len(batch.items))
 
 		library, err := h.db.UpsertLibrary(ctx, db.UpsertLibraryParams{
-			SectionKey: batch.sectionKey,
-			Title:      batch.section.Title,
-			Type:       batch.section.Type,
+			Provider:   h.provider(),
+			SectionKey: batch.libraryKey,
+			Title:      batch.library.Title,
+			Type:       batch.library.Type,
 			ImportedAt: time.Now().Unix(),
 		})
 		if err != nil {
-			slog.Error("failed to upsert library", "section", batch.sectionKey, "error", err)
-			send(sseErrorEvent{Type: "error", Message: "database error for library " + batch.section.Title})
+			slog.Error("failed to upsert library", "section", batch.libraryKey, "error", err)
+			send(sseErrorEvent{Type: "error", Message: "database error for library " + batch.library.Title})
 			return nil
 		}
 
 		// Build set of existing rating_keys for this library+type to detect new vs existing items.
 		existingKeys, err := h.db.ListRatingKeysByLibraryIDAndType(ctx, db.ListRatingKeysByLibraryIDAndTypeParams{
 			LibraryID: library.ID,
-			Type:      batch.target.Type,
+			Type:      batch.mediaType,
 		})
 		if err != nil {
 			slog.Error("failed to list existing keys", "error", err)
@@ -195,65 +181,66 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 		now := time.Now().Unix()
 		for _, item := range batch.items {
 			current++
-			_, isExisting := existingSet[item.RatingKey]
+			_, isExisting := existingSet[item.ID]
 
 			var thumbExt string
-			if item.Thumb != "" {
+			if item.HasPoster {
 				var saveErr error
-				thumbExt, saveErr = h.saveThumb(ctx, batch.target.Type, item.RatingKey, item.Thumb)
-				if errors.Is(saveErr, errThumbUnchanged) && isExisting {
+				thumbExt, saveErr = h.savePoster(ctx, batch.mediaType, item.ID)
+				if errors.Is(saveErr, errPosterUnchanged) && isExisting {
 					skipped++
-					processedSet[item.RatingKey] = struct{}{}
+					processedSet[item.ID] = struct{}{}
 					send(sseSkipEvent{Type: "skip", Title: item.Title, Message: "unchanged"})
 					send(sseProgressEvent{Type: "progress", Current: current, Total: total})
 					continue
 				}
-				if saveErr != nil && !errors.Is(saveErr, errThumbUnchanged) {
-					slog.Warn("failed to save thumb", "title", item.Title, "ratingKey", item.RatingKey, "error", saveErr)
+				if saveErr != nil && !errors.Is(saveErr, errPosterUnchanged) {
+					slog.Warn("failed to save poster", "title", item.Title, "id", item.ID, "error", saveErr)
 					send(sseSkipEvent{Type: "skip", Title: item.Title, Message: "thumbnail download failed: " + saveErr.Error()})
 				}
 			}
 
 			params := db.UpsertMediaParams{
+				Provider:     h.provider(),
 				LibraryID:    library.ID,
-				RatingKey:    item.RatingKey,
+				RatingKey:    item.ID,
 				Title:        item.Title,
-				Type:         batch.target.Type,
+				Type:         batch.mediaType,
 				Year:         sql.NullInt64{Int64: int64(item.Year), Valid: item.Year != 0},
-				SeasonNumber: sql.NullInt64{Int64: int64(item.Index), Valid: batch.target.Type == "season" && item.Index != 0},
+				SeasonNumber: sql.NullInt64{Int64: int64(item.SeasonNumber), Valid: batch.mediaType == mediaserver.TypeSeason && item.SeasonNumber != 0},
 				Thumb:        sql.NullString{String: thumbExt, Valid: thumbExt != ""},
 				AddedAt:      sql.NullInt64{Int64: item.AddedAt, Valid: item.AddedAt != 0},
 				CreatedAt:    now,
 				UpdatedAt:    now,
 			}
 			if err := h.db.UpsertMedia(ctx, params); err != nil {
-				slog.Error("failed to upsert media", "title", item.Title, "ratingKey", item.RatingKey, "error", err)
+				slog.Error("failed to upsert media", "title", item.Title, "id", item.ID, "error", err)
 			} else {
 				if !isExisting {
-					slog.Info("imported", "type", batch.target.Type, "title", item.Title)
+					slog.Info("imported", "type", batch.mediaType, "title", item.Title)
 					added++
 				}
-				processedSet[item.RatingKey] = struct{}{}
-				// The poster was just re-downloaded from Plex, so any pending
+				processedSet[item.ID] = struct{}{}
+				// The poster was just re-downloaded from the server, so any pending
 				// local push is now stale — remove it from the queue.
-				if err := h.db.DeletePosterQueueByRatingKey(ctx, item.RatingKey); err != nil {
-					slog.Warn("failed to remove stale queue entry", "ratingKey", item.RatingKey, "error", err)
+				if err := h.db.DeletePosterQueueByRatingKey(ctx, item.ID); err != nil {
+					slog.Warn("failed to remove stale queue entry", "id", item.ID, "error", err)
 				}
 			}
 
 			send(sseProgressEvent{Type: "progress", Current: current, Total: total})
 		}
 
-		// Mark items no longer in Plex as orphans.
+		// Mark items no longer on the server as orphans.
 		for key := range existingSet {
 			if _, processed := processedSet[key]; !processed {
 				if err := h.db.MarkOrphan(ctx, db.MarkOrphanParams{
 					RatingKey: key,
 					UpdatedAt: now,
 				}); err != nil {
-					slog.Error("failed to mark orphan", "ratingKey", key, "error", err)
+					slog.Error("failed to mark orphan", "id", key, "error", err)
 				} else {
-					slog.Info("marked as orphan", "type", batch.target.Type, "ratingKey", key)
+					slog.Info("marked as orphan", "type", batch.mediaType, "id", key)
 					deleted++
 				}
 			}
@@ -265,13 +252,25 @@ func (h *Handler) ImportFromPlex(c *echo.Context) error {
 	return nil
 }
 
-var errThumbUnchanged = errors.New("unchanged")
+// collectionLibraryKey returns the key of the server-wide collection library,
+// if the server exposes one.
+func collectionLibraryKey(libs []mediaserver.Library) (string, bool) {
+	for _, l := range libs {
+		if l.Type == mediaserver.TypeCollection {
+			return l.Key, true
+		}
+	}
+	return "", false
+}
 
-// saveThumb downloads a poster from Plex and writes it to disk, skipping the
-// write if the file already exists with identical content.
-// It returns the file extension (e.g. "jpg", "png", "webp") and any error.
-func (h *Handler) saveThumb(ctx context.Context, mediaType, ratingKey, thumbPath string) (string, error) {
-	data, ext, err := h.plex.DownloadThumb(ctx, thumbPath)
+var errPosterUnchanged = errors.New("unchanged")
+
+// savePoster downloads the poster currently set on the media server and writes
+// it to disk, skipping the write if the file already exists with identical
+// content. It returns the file extension (e.g. "jpg", "png", "webp") and any
+// error, or errPosterUnchanged when the local copy is already up to date.
+func (h *Handler) savePoster(ctx context.Context, mediaType, itemID string) (string, error) {
+	data, ext, err := h.server.DownloadPoster(ctx, itemID)
 	if err != nil {
 		return "", err
 	}
@@ -281,10 +280,10 @@ func (h *Handler) saveThumb(ctx context.Context, mediaType, ratingKey, thumbPath
 		return "", err
 	}
 
-	dest := filepath.Join(dir, ratingKey+"."+ext)
+	dest := filepath.Join(dir, itemID+"."+ext)
 
 	if existing, err := os.ReadFile(dest); err == nil && bytes.Equal(existing, data) {
-		return ext, errThumbUnchanged
+		return ext, errPosterUnchanged
 	}
 
 	return ext, os.WriteFile(dest, data, 0o644)

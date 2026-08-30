@@ -11,13 +11,17 @@ WHERE media_id = (SELECT id FROM media WHERE rating_key = ?);
 SELECT pq.id, m.rating_key, m.title, m.type, m.thumb
 FROM poster_queue pq
 JOIN media m ON m.id = pq.media_id
+WHERE m.provider = ?
 ORDER BY pq.created_at DESC;
 
 -- name: CountPosterQueue :one
-SELECT COUNT(*) FROM poster_queue;
+SELECT COUNT(*) FROM poster_queue pq
+JOIN media m ON m.id = pq.media_id
+WHERE m.provider = ?;
 
 -- name: ListPosterQueueWithMedia :many
 SELECT pq.id, m.id AS media_id, m.rating_key, m.title, m.type, m.season_number, m.thumb
 FROM poster_queue pq
 JOIN media m ON m.id = pq.media_id
+WHERE m.provider = ?
 ORDER BY pq.created_at DESC;

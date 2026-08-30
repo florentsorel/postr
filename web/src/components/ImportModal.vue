@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue"
 import { readSSEStream } from "@/composables/useSSEStream"
+import { useServerStore } from "@/stores/useServerStore"
+
+const server = useServerStore()
 
 type PingStatus = "idle" | "loading" | "ok" | "error"
 type Phase = "selecting" | "importing" | "done"
@@ -76,7 +79,10 @@ async function checkConnection() {
   libraries.value = []
   selected.value = []
   try {
-    const [pingRes, libRes] = await Promise.all([fetch("/api/plex/ping"), fetch("/api/libraries")])
+    const [pingRes, libRes] = await Promise.all([
+      fetch("/api/server/ping"),
+      fetch("/api/libraries"),
+    ])
     const pingData = await pingRes.json()
     if (pingData.reachable) {
       pingStatus.value = "ok"
@@ -89,11 +95,11 @@ async function checkConnection() {
       }
     } else {
       pingStatus.value = "error"
-      pingError.value = pingData.error ?? "Unable to reach Plex server."
+      pingError.value = pingData.error ?? `Unable to reach ${server.name} server.`
     }
   } catch {
     pingStatus.value = "error"
-    pingError.value = "Unable to reach Plex server."
+    pingError.value = `Unable to reach ${server.name} server.`
   }
 }
 
@@ -124,7 +130,7 @@ async function startImport() {
   }))
 
   await readSSEStream(
-    "/api/plex/import",
+    "/api/server/import",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -167,7 +173,7 @@ function close() {
   <UModal
     :open="open"
     class="select-none"
-    title="Import from Plex"
+    :title="`Import from ${server.name}`"
     :description="phase === 'selecting' ? 'Select which media types to import.' : undefined"
     :close="phase !== 'importing'"
     :dismissible="phase !== 'importing'"
@@ -183,7 +189,7 @@ function close() {
         <!-- Loading -->
         <div v-if="pingStatus === 'loading'" class="flex items-center gap-2 text-sm px-1">
           <UIcon name="i-lucide-loader-circle" class="w-4 h-4 text-neutral-400 animate-spin" />
-          <span class="text-neutral-400">Checking Plex connection…</span>
+          <span class="text-neutral-400">Checking {{ server.name }} connection…</span>
         </div>
 
         <!-- Error -->

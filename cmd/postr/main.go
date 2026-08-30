@@ -7,13 +7,15 @@ import (
 	"path/filepath"
 
 	"github.com/florentsorel/postr/internal/config"
-	"github.com/lmittmann/tint"
 	"github.com/florentsorel/postr/internal/db"
 	"github.com/florentsorel/postr/internal/handler"
-	"github.com/florentsorel/postr/internal/plex"
+	"github.com/florentsorel/postr/internal/mediaserver"
+	"github.com/florentsorel/postr/internal/mediaserver/jellyfin"
+	"github.com/florentsorel/postr/internal/mediaserver/plex"
 	"github.com/florentsorel/postr/internal/web"
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
+	"github.com/lmittmann/tint"
 )
 
 func main() {
@@ -71,12 +73,20 @@ func main() {
 	}
 	defer conn.Close()
 
-	var plexClient handler.PlexClient
-	if cfg.PlexURL != "" && cfg.PlexToken != "" {
-		plexClient = plex.NewClient(cfg.PlexURL, cfg.PlexToken)
+	// Postr talks to one media server at a time; which one is decided by
+	// MEDIA_SERVER, or inferred from whichever server's URL is set.
+	var serverClient mediaserver.Client
+	if cfg.ServerConfigured() {
+		switch cfg.MediaServer {
+		case mediaserver.ProviderJellyfin:
+			serverClient = jellyfin.NewClient(cfg.JellyfinURL, cfg.JellyfinAPIKey)
+		default:
+			serverClient = plex.NewClient(cfg.PlexURL, cfg.PlexToken)
+		}
 	}
+	slog.Info("media server", "provider", cfg.MediaServer, "configured", cfg.ServerConfigured())
 
-	h := handler.New(db.New(conn), cfg, plexClient)
+	h := handler.New(db.New(conn), cfg, serverClient)
 
 	// Public auth routes
 	e.POST("/api/auth/login", h.Login)
@@ -102,10 +112,10 @@ func main() {
 	api.DELETE("/queue/:ratingKey", h.RemoveFromQueue)
 	api.POST("/queue/push-all", h.PushAllPosters)
 
-	api.GET("/plex/status", h.GetPlexStatus)
-	api.GET("/plex/ping", h.PingPlex)
-	api.POST("/plex/import", h.ImportFromPlex)
-	api.POST("/plex/sync", h.SyncFromPlex)
+	api.GET("/server/status", h.GetServerStatus)
+	api.GET("/server/ping", h.PingServer)
+	api.POST("/server/import", h.ImportFromServer)
+	api.POST("/server/sync", h.SyncFromServer)
 
 	// SPA fallback — serve embedded frontend for all non-API routes
 	e.GET("/*", echo.WrapHandler(web.Handler()))

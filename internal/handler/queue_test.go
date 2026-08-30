@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -61,11 +60,11 @@ func simulateLocalChange(t *testing.T, setup *testSetup, ratingKey, mediaType st
 	}
 }
 
-// TestPushPoster_NoFalseSyncAfterPlexReencode reproduces the bug where syncing
-// after a push detected spurious changes because Plex re-encodes uploaded
+// TestPushPoster_NoFalseSyncAfterReencode reproduces the bug where syncing
+// after a push detected spurious changes because the media server re-encodes uploaded
 // images. After a successful push, the local copy must be updated with the
-// bytes Plex actually stores so the next sync sees no difference.
-func TestPushPoster_NoFalseSyncAfterPlexReencode(t *testing.T) {
+// bytes the server actually stores so the next sync sees no difference.
+func TestPushPoster_NoFalseSyncAfterReencode(t *testing.T) {
 	mock := defaultMock()
 	setup := newTestSetup(t, mock)
 
@@ -75,28 +74,28 @@ func TestPushPoster_NoFalseSyncAfterPlexReencode(t *testing.T) {
 	// Simulate user uploading a new poster for item 101.
 	simulateLocalChange(t, setup, "101", "movie", []byte("user-uploaded-poster"))
 
-	// Plex re-encodes the image on its end — what it serves back differs from
+	// The server re-encodes the image on its end — what it serves back differs from
 	// what we uploaded. Other items keep their original bytes.
-	plexStoredVersion := []byte("plex-reencoded-poster")
-	mock.downloadThumbFunc = func(_ context.Context, thumbPath string) ([]byte, string, error) {
-		if strings.Contains(thumbPath, "101") {
-			return plexStoredVersion, "jpg", nil
+	serverStoredVersion := []byte("plex-reencoded-poster")
+	mock.downloadFunc = func(_ context.Context, itemID string) ([]byte, string, error) {
+		if itemID == "101" {
+			return serverStoredVersion, "jpg", nil
 		}
 		return []byte("fake-poster"), "jpg", nil
 	}
 
-	// Push: uploads the local file, then resyncLocalThumb downloads Plex's
-	// version and updates the local copy.
+	// Push: uploads the local file, then resyncLocalPoster downloads the
+	// server's version and updates the local copy.
 	code := runPushPoster(t, setup.handler, "101")
 	if code != http.StatusNoContent {
 		t.Fatalf("PushPoster: want 204, got %d", code)
 	}
 
-	// Sync: Plex still returns the same re-encoded bytes — local copy must
+	// Sync: the server still returns the same re-encoded bytes — local copy must
 	// already match, so zero changes should be reported.
 	result := runSync(t, setup.handler)
 
 	if result.Changed != 0 {
-		t.Errorf("Changed: want 0 after push+resync, got %d (false positives from Plex re-encoding)", result.Changed)
+		t.Errorf("Changed: want 0 after push+resync, got %d (false positives from server-side re-encoding)", result.Changed)
 	}
 }

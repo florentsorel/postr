@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/florentsorel/postr/internal/db"
+	"github.com/florentsorel/postr/internal/mediaserver"
 	"github.com/labstack/echo/v5"
 )
 
@@ -19,14 +20,22 @@ type sourceResponse struct {
 }
 
 type settingsResponse struct {
-	PlexURL      string           `json:"plex_url"`
-	PlexTokenSet bool             `json:"plex_token_set"`
-	AuthEnabled  bool             `json:"auth_enabled"`
-	AuthUser     string           `json:"auth_user"`
-	AuthPassSet  bool             `json:"auth_pass_set"`
-	AutoResize   bool             `json:"auto_resize"`
-	ResizeWidth  int              `json:"resize_width"`
-	Sources      []sourceResponse `json:"sources"`
+	// Provider is the active media server: "plex" or "jellyfin".
+	Provider string `json:"provider"`
+	// ServerName is its display name, e.g. "Jellyfin".
+	ServerName string `json:"server_name"`
+	// ServerURL is the normalized base URL of the active server.
+	ServerURL string `json:"server_url"`
+	// ServerTokenSet reports whether a credential is set, without exposing it.
+	ServerTokenSet bool `json:"server_token_set"`
+	// ServerTokenLabel names the credential in the UI: "Token" or "API key".
+	ServerTokenLabel string           `json:"server_token_label"`
+	AuthEnabled      bool             `json:"auth_enabled"`
+	AuthUser         string           `json:"auth_user"`
+	AuthPassSet      bool             `json:"auth_pass_set"`
+	AutoResize       bool             `json:"auto_resize"`
+	ResizeWidth      int              `json:"resize_width"`
+	Sources          []sourceResponse `json:"sources"`
 }
 
 var sourceMeta = map[string]struct{ label, description string }{
@@ -41,14 +50,22 @@ func (h *Handler) GetSettings(c *echo.Context) error {
 		return jsonInternalError(c, err)
 	}
 
+	tokenLabel := "Token"
+	if h.provider() == mediaserver.ProviderJellyfin {
+		tokenLabel = "API key"
+	}
+
 	resp := settingsResponse{
-		PlexURL:      h.config.PlexURL,
-		PlexTokenSet: h.config.PlexToken != "",
-		AuthEnabled:  h.config.AuthEnabled,
-		AuthUser:     h.config.AuthUser,
-		AuthPassSet:  h.config.AuthPass != "",
-		AutoResize:   true,
-		ResizeWidth:  1000,
+		Provider:         h.provider(),
+		ServerName:       h.serverName(),
+		ServerURL:        h.config.ServerURL(),
+		ServerTokenSet:   h.config.ServerToken() != "",
+		ServerTokenLabel: tokenLabel,
+		AuthEnabled:      h.config.AuthEnabled,
+		AuthUser:         h.config.AuthUser,
+		AuthPassSet:      h.config.AuthPass != "",
+		AutoResize:       true,
+		ResizeWidth:      1000,
 	}
 
 	for _, s := range settings {

@@ -201,7 +201,7 @@ func (h *Handler) UploadPosterFromURL(c *echo.Context) error {
 }
 
 func (h *Handler) GetMedia(c *echo.Context) error {
-	rows, err := h.db.ListMedia(c.Request().Context())
+	rows, err := h.db.ListMedia(c.Request().Context(), h.provider())
 	if err != nil {
 		return jsonInternalError(c, err)
 	}

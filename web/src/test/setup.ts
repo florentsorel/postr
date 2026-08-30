@@ -2,6 +2,7 @@ import "@testing-library/jest-dom"
 import { vi, afterEach } from "vitest"
 import { config } from "@vue/test-utils"
 import { createRouter, createMemoryHistory } from "vue-router"
+import { createPinia } from "pinia"
 import ui from "@nuxt/ui/vue-plugin"
 
 // Nuxt UI fetches SVG icons at runtime — stub fetch to avoid happy-dom
@@ -41,7 +42,7 @@ const router = createRouter({
 // Register Nuxt UI components + router globally.
 // This avoids individual vi.mock() calls for every component and ensures
 // virtual Nuxt modules (#imports, #build/ui/*) are properly resolved.
-config.global.plugins = [router, ui]
+config.global.plugins = [router, ui, createPinia()]
 
 // UTooltip requires a TooltipProvider context (provided by UApp) which is
 // not present in unit tests — stub it globally to render its slot content.
