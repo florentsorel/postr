@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/florentsorel/postr/internal/db"
+	"github.com/florentsorel/postr/internal/mediaserver"
 	"github.com/florentsorel/postr/internal/posters"
 	"github.com/labstack/echo/v5"
 )
@@ -276,6 +277,48 @@ func posterExt(resp *http.Response, rawURL string, data []byte) string {
 		return ext
 	}
 	return ""
+}
+
+// previewWidth is enough for the 160pt preview box on a 3x display, and keeps
+// the round-trip small: poster sites serve 10 MB scans for a thumbnail nobody
+// looks at full size.
+const previewWidth = 480
+
+// GetPosterPreview fetches a remote image through the backend and returns a
+// small version of it.
+//
+// The browser cannot load these URLs itself: it sends a Referer carrying
+// Postr's own origin, and the bot protection in front of poster sites answers
+// 403 to it (ThePosterDB rejects a localhost Referer while accepting a public
+// one). The server sends no Referer at all, which is why the same URL works
+// from here.
+//
+// This reaches arbitrary URLs on behalf of the user, but adds no capability
+// that POST /api/media/:ratingKey/upload-url did not already have, and sits
+// behind the same authentication.
+func (h *Handler) GetPosterPreview(c *echo.Context) error {
+	rawURL := strings.TrimSpace(c.QueryParam("url"))
+	if rawURL == "" {
+		return jsonError(c, http.StatusBadRequest, "url required")
+	}
+
+	data, ext, status, err := fetchRemotePoster(c.Request().Context(), rawURL)
+	if err != nil {
+		return jsonError(c, status, err.Error())
+	}
+
+	// A failure here is not worth surfacing: the full-size image is still a
+	// valid preview, just heavier.
+	if small, smallExt, resizeErr := posters.Resize(data, ext, previewWidth); resizeErr == nil {
+		data, ext = small, smallExt
+	} else {
+		slog.Warn("could not shrink poster preview", "url", rawURL, "error", resizeErr)
+	}
+
+	// The URL is user input that changes as they type; caching it would only
+	// serve stale bytes.
+	c.Response().Header().Set("Cache-Control", "no-store")
+	return c.Blob(http.StatusOK, mediaserver.ContentTypeFromExt(ext), data)
 }
 
 func (h *Handler) UploadPosterFromURL(c *echo.Context) error {

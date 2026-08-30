@@ -138,6 +138,7 @@ func main() {
 	api.GET("/media/:ratingKey/thumb", h.GetMediaThumb)
 	api.POST("/media/:ratingKey/upload", h.UploadMediaPoster)
 	api.POST("/media/:ratingKey/upload-url", h.UploadPosterFromURL)
+	api.GET("/poster-preview", h.GetPosterPreview)
 	api.POST("/media/:ratingKey/push", h.PushPoster)
 
 	api.GET("/queue", h.GetQueue)

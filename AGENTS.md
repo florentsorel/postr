@@ -150,6 +150,8 @@ Each media card exposes actions on hover:
 - **Trust the bytes, not the URL.** A path ending in `.jpg` proves nothing: an HTML error page served under a `200` used to be stored as a poster and pushed to the media server. The extension comes from `Content-Type`, then the `Content-Disposition` filename (poster sites serve extension-less asset URLs), then `http.DetectContentType`. Anything that is not JPEG/PNG/WEBP is refused.
 - **Time out.** `http.DefaultClient` has no timeout; a host that accepts the connection then stalls would hang the request indefinitely.
 
+The preview in the "From URL" tab goes through `GET /api/poster-preview` for the same reason, plus one of its own: a browser always attaches Postr's origin as `Referer`, and cannot be told not to. ThePosterDB answers `403` to a `localhost` Referer while accepting a public one, so the `<img>` failed even though the upload worked. The server sends no Referer at all. The endpoint also shrinks the image to `previewWidth` — independently of the resize setting, since a thumbnail is not the artwork being chosen — and the frontend debounces the URL field so a typed address does not send the server after a dozen multi-megabyte images.
+
 ### 3.2 Resizing
 
 `posters.Resize` scales user-supplied artwork down to the configured width, wired into `storePoster` — the single funnel both the file and URL paths go through. **Import and sync do not pass through it**: what the media server holds is stored verbatim, or byte-comparison would report a change on every sync.
@@ -274,6 +276,7 @@ The application is packaged as a single Docker image containing both the Go back
 | `GET`    | `/api/media/:ratingKey/thumb`      | Serve locally stored poster for a media item       |
 | `POST`   | `/api/media/:ratingKey/upload`     | Upload a poster file (multipart)                   |
 | `POST`   | `/api/media/:ratingKey/upload-url` | Fetch and store a poster from a URL (server-side)  |
+| `GET`    | `/api/poster-preview`              | Proxy + shrink a remote image for the URL preview  |
 | `POST`   | `/api/media/:ratingKey/push`       | Push local poster to the media server              |
 | `GET`    | `/api/queue`                       | List pending poster changes                        |
 | `DELETE` | `/api/queue/:ratingKey`            | Remove item from queue (restores server poster)    |

@@ -8,6 +8,7 @@ import (
 	"image/jpeg"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -304,5 +305,117 @@ func TestUploadPosterFromURL_KeepsFullSizeWhenDisabled(t *testing.T) {
 	}
 	if !bytes.Equal(stored, original) {
 		t.Error("with auto_resize off the poster must be stored byte-for-byte")
+	}
+}
+
+// getPreview drives GET /api/poster-preview and returns the status, the
+// Content-Type and the body.
+func getPreview(t *testing.T, setup *testSetup, rawURL string) (int, string, []byte) {
+	t.Helper()
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/poster-preview?url="+url.QueryEscape(rawURL), nil)
+	rec := httptest.NewRecorder()
+	if err := setup.handler.GetPosterPreview(e.NewContext(req, rec)); err != nil {
+		t.Fatalf("GetPosterPreview: %v", err)
+	}
+	return rec.Code, rec.Header().Get("Content-Type"), rec.Body.Bytes()
+}
+
+// TestGetPosterPreview_SendsNoReferer is the reason this endpoint exists. The
+// browser always attaches Postr's own origin as Referer, and the bot protection
+// in front of poster sites answers 403 to it — ThePosterDB rejects a localhost
+// Referer while accepting a public one. The server must send none.
+func TestGetPosterPreview_SendsNoReferer(t *testing.T) {
+	var gotReferer string
+	var seen bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotReferer, seen = r.Header.Get("Referer"), true
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = w.Write(bigJPEG(t, 1200, 1800))
+	}))
+	defer srv.Close()
+
+	setup := importedSetup(t)
+	if code, _, _ := getPreview(t, setup, srv.URL+"/api/assets/272535"); code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d", code)
+	}
+	if !seen {
+		t.Fatal("the upstream server was never called")
+	}
+	if gotReferer != "" {
+		t.Errorf("Referer = %q; it must be absent or poster sites answer 403", gotReferer)
+	}
+}
+
+// TestGetPosterPreview_ShrinksTheImage keeps a 10 MB scan from crossing the
+// wire for a thumbnail.
+func TestGetPosterPreview_ShrinksTheImage(t *testing.T) {
+	original := bigJPEG(t, 3158, 4737)
+	srv := servePoster(t, original)
+
+	setup := importedSetup(t)
+	code, contentType, body := getPreview(t, setup, srv.URL+"/api/assets/272535")
+
+	if code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d", code)
+	}
+	if contentType != "image/jpeg" {
+		t.Errorf("Content-Type = %q, want image/jpeg", contentType)
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("preview is not a valid image: %v", err)
+	}
+	if cfg.Width != 480 {
+		t.Errorf("preview width = %d, want 480", cfg.Width)
+	}
+	if len(body) >= len(original) {
+		t.Errorf("preview is not smaller than the source: %d -> %d bytes", len(original), len(body))
+	}
+}
+
+// TestGetPosterPreview_ShrinkingIsIndependentOfTheResizeSetting: the preview is
+// a thumbnail, not the artwork the user is choosing to store.
+func TestGetPosterPreview_ShrinkingIsIndependentOfTheResizeSetting(t *testing.T) {
+	srv := servePoster(t, bigJPEG(t, 2000, 3000))
+
+	setup := importedSetup(t) // auto_resize is seeded off
+	_, _, body := getPreview(t, setup, srv.URL+"/p.jpg")
+
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("preview is not a valid image: %v", err)
+	}
+	if cfg.Width != 480 {
+		t.Errorf("preview width = %d, want 480 regardless of auto_resize", cfg.Width)
+	}
+}
+
+func TestGetPosterPreview_RequiresAURL(t *testing.T) {
+	setup := importedSetup(t)
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	if err := setup.handler.GetPosterPreview(e.NewContext(httptest.NewRequest(http.MethodGet, "/api/poster-preview", nil), rec)); err != nil {
+		t.Fatalf("GetPosterPreview: %v", err)
+	}
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status: want 400, got %d", rec.Code)
+	}
+}
+
+func TestGetPosterPreview_ReportsUpstreamRefusal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	setup := importedSetup(t)
+	code, _, body := getPreview(t, setup, srv.URL+"/blocked.jpg")
+
+	if code != http.StatusBadGateway {
+		t.Errorf("status: want 502, got %d", code)
+	}
+	if !strings.Contains(string(body), "403") {
+		t.Errorf("the error should carry the upstream status, got %s", body)
 	}
 }
