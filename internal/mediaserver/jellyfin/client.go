@@ -76,6 +76,27 @@ type item struct {
 	DateCreated    string            `json:"DateCreated"`
 	IndexNumber    int               `json:"IndexNumber"`
 	ImageTags      map[string]string `json:"ImageTags"`
+	SeriesID       string            `json:"SeriesId"`
+	ProviderIds    map[string]string `json:"ProviderIds"`
+}
+
+// externalIDs lowercases Jellyfin's provider names ("Tmdb") so they line up
+// with the sources Plex reports ("tmdb").
+func (i item) externalIDs() map[string]string {
+	if len(i.ProviderIds) == 0 {
+		return nil
+	}
+	ids := make(map[string]string, len(i.ProviderIds))
+	for source, id := range i.ProviderIds {
+		if id == "" {
+			continue
+		}
+		ids[strings.ToLower(source)] = id
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	return ids
 }
 
 type itemsResponse struct {
@@ -106,7 +127,7 @@ func (c *Client) Libraries(ctx context.Context) ([]mediaserver.Library, error) {
 	return libraries, nil
 }
 
-func (c *Client) Items(ctx context.Context, libraryKey, mediaType string) ([]mediaserver.Item, error) {
+func (c *Client) Items(ctx context.Context, libraryKey, mediaType string) (items []mediaserver.Item, err error) {
 	var includeType string
 	switch mediaType {
 	case mediaserver.TypeMovie:
@@ -125,7 +146,7 @@ func (c *Client) Items(ctx context.Context, libraryKey, mediaType string) ([]med
 	q.Set("ParentId", libraryKey)
 	q.Set("IncludeItemTypes", includeType)
 	q.Set("Recursive", "true")
-	q.Set("Fields", "DateCreated,ProductionYear,PremiereDate")
+	q.Set("Fields", "DateCreated,ProductionYear,PremiereDate,ProviderIds")
 	q.Set("EnableImageTypes", "Primary")
 
 	var r itemsResponse
@@ -133,14 +154,25 @@ func (c *Client) Items(ctx context.Context, libraryKey, mediaType string) ([]med
 		return nil, err
 	}
 
+	// Jellyfin leaves a season's own ProviderIds empty, so seasons borrow their
+	// series' identifiers — the same shape Plex reports.
+	var seriesIDs map[string]map[string]string
+	if mediaType == mediaserver.TypeSeason {
+		seriesIDs, err = c.seriesExternalIDs(ctx, libraryKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	out := make([]mediaserver.Item, 0, len(r.Items))
 	for _, i := range r.Items {
 		converted := mediaserver.Item{
-			ID:        i.ID,
-			Title:     i.Name,
-			Year:      i.year(),
-			AddedAt:   parseTime(i.DateCreated),
-			HasPoster: i.ImageTags["Primary"] != "",
+			ID:          i.ID,
+			Title:       i.Name,
+			Year:        i.year(),
+			AddedAt:     parseTime(i.DateCreated),
+			HasPoster:   i.ImageTags["Primary"] != "",
+			ExternalIDs: i.externalIDs(),
 		}
 		// Season cards are labelled with the series title, matching Plex.
 		if mediaType == mediaserver.TypeSeason {
@@ -148,8 +180,34 @@ func (c *Client) Items(ctx context.Context, libraryKey, mediaType string) ([]med
 			if i.SeriesName != "" {
 				converted.Title = i.SeriesName
 			}
+			if ids := seriesIDs[i.SeriesID]; len(ids) > 0 {
+				converted.ExternalIDs = ids
+			}
 		}
 		out = append(out, converted)
+	}
+	return out, nil
+}
+
+// seriesExternalIDs maps every series in a library to its external identifiers,
+// so seasons can inherit them.
+func (c *Client) seriesExternalIDs(ctx context.Context, libraryKey string) (map[string]map[string]string, error) {
+	q := url.Values{}
+	q.Set("ParentId", libraryKey)
+	q.Set("IncludeItemTypes", itemTypeSeries)
+	q.Set("Recursive", "true")
+	q.Set("Fields", "ProviderIds")
+
+	var r itemsResponse
+	if err := c.get(ctx, "/Items?"+q.Encode(), &r); err != nil {
+		return nil, err
+	}
+
+	out := make(map[string]map[string]string, len(r.Items))
+	for _, i := range r.Items {
+		if ids := i.externalIDs(); len(ids) > 0 {
+			out[i.ID] = ids
+		}
 	}
 	return out, nil
 }

@@ -6,6 +6,7 @@ package mediaserver
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 )
 
@@ -56,6 +57,48 @@ type Item struct {
 	// HasPoster reports whether the server currently has a poster for the item;
 	// when false there is nothing to download.
 	HasPoster bool
+	// ExternalIDs holds metadata-provider identifiers keyed by lowercase source
+	// name ("tmdb", "imdb", "tvdb"). They are what lets the same title be
+	// recognised across two different servers, since each assigns its own
+	// unrelated internal ID.
+	//
+	// For seasons these are the parent series' identifiers: neither Plex nor
+	// Jellyfin reliably assigns external IDs to a season, so a season is
+	// identified by its series plus SeasonNumber.
+	//
+	// Collections carry none — neither server tracks them in an external
+	// database — so they can only ever be matched by title.
+	ExternalIDs map[string]string
+}
+
+// MatchKeys returns every identity this item can be recognised by on another
+// server — one per external source it carries — or nothing when it carries
+// none.
+//
+// All of them are returned rather than a single preferred one: two servers
+// rarely agree on which sources they store, and picking one order would miss a
+// pair that shares a different source. A Plex item known only by IMDB must
+// still meet a Jellyfin item known by TMDB *and* IMDB.
+//
+// The media type is part of each key because a TMDB movie id and a TMDB series
+// id are drawn from separate numbering spaces.
+func (i Item) MatchKeys(mediaType string) []string {
+	if len(i.ExternalIDs) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(i.ExternalIDs))
+	for _, source := range []string{"tmdb", "imdb", "tvdb"} {
+		id := i.ExternalIDs[source]
+		if id == "" {
+			continue
+		}
+		key := mediaType + "|" + source + ":" + id
+		if mediaType == TypeSeason {
+			key += "|s" + strconv.Itoa(i.SeasonNumber)
+		}
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 // Client is the set of operations Postr needs from a media server.

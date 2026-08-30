@@ -45,7 +45,7 @@ func (h *Handler) GetMediaThumb(c *echo.Context) error {
 	if m.Thumb.Valid && m.Thumb.String != "" {
 		ext = m.Thumb.String
 	}
-	path := filepath.Join(h.config.DataPath, "posters", m.Type, ratingKey+"."+ext)
+	path := h.posterPath(m.Type, ratingKey, ext)
 	c.Response().Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	http.ServeFile(c.Response(), c.Request(), path)
 	return nil
@@ -66,16 +66,15 @@ func extFromFilename(filename string) string {
 
 // storePoster writes poster data to disk, updates the DB, and enqueues the item.
 func (h *Handler) storePoster(ctx context.Context, m db.GetMediaByRatingKeyRow, ratingKey, ext string, data []byte) error {
-	dir := filepath.Join(h.config.DataPath, "posters", m.Type)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(h.posterDir(m.Type), 0o755); err != nil {
 		return err
 	}
 	for _, oldExt := range []string{"jpg", "jpeg", "png", "webp"} {
 		if oldExt != ext {
-			_ = os.Remove(filepath.Join(dir, ratingKey+"."+oldExt))
+			_ = os.Remove(h.posterPath(m.Type, ratingKey, oldExt))
 		}
 	}
-	if err := os.WriteFile(filepath.Join(dir, ratingKey+"."+ext), data, 0o644); err != nil {
+	if err := os.WriteFile(h.posterPath(m.Type, ratingKey, ext), data, 0o644); err != nil {
 		return err
 	}
 	now := time.Now().Unix()
@@ -252,7 +251,7 @@ func (h *Handler) DeleteOrphan(c *echo.Context) error {
 	}
 
 	for _, ext := range []string{"jpg", "png", "webp"} {
-		_ = os.Remove(filepath.Join(h.config.DataPath, "posters", m.Type, ratingKey+"."+ext))
+		_ = os.Remove(h.posterPath(m.Type, ratingKey, ext))
 	}
 
 	slog.Info("orphan deleted", "type", m.Type, "title", m.Title, "ratingKey", ratingKey)

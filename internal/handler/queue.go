@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -132,7 +131,7 @@ func (h *Handler) PushPoster(c *echo.Context) error {
 		ext = m.Thumb.String
 	}
 
-	path := filepath.Join(h.config.DataPath, "posters", m.Type, ratingKey+"."+ext)
+	path := h.posterPath(m.Type, ratingKey, ext)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return jsonError(c, http.StatusNotFound, "poster file not found")
@@ -211,7 +210,7 @@ func (h *Handler) PushAllPosters(c *echo.Context) error {
 			}
 			defer sem.Release(1)
 
-			path := filepath.Join(h.config.DataPath, "posters", rType, ratingKey+"."+thumbStr)
+			path := h.posterPath(rType, ratingKey, thumbStr)
 			data, err := os.ReadFile(path)
 			if err != nil {
 				mu.Lock()

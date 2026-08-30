@@ -4,6 +4,7 @@ import { useRouter } from "vue-router"
 import { useApiError } from "@/composables/useApiError"
 import { useAuthStore } from "@/stores/useAuthStore"
 import { useServerStore } from "@/stores/useServerStore"
+import MigratePostersModal from "@/components/MigratePostersModal.vue"
 const version = import.meta.env.VITE_APP_VERSION ?? "unknown"
 
 const router = useRouter()
@@ -61,6 +62,37 @@ const env = ref({
 })
 
 const options = ref({ autoResize: true, resizeWidth: 1000 })
+
+// Poster migration is only offered when a second server is configured and holds
+// artwork worth carrying over.
+const migrateModalOpen = ref(false)
+const migrateStatus = ref<{
+  available: boolean
+  sourceName: string
+  posterCount: number
+  reason?: string
+} | null>(null)
+
+// After a migration the posters sit in the queue, so the counts shown here are
+// stale until we ask again.
+async function onMigrated() {
+  await loadMigrateStatus()
+  toast.add({
+    title: "Posters migrated to the queue",
+    description: `Open the queue from the library to review them before pushing to ${server.name}.`,
+    color: "success",
+    icon: "i-lucide-check",
+  })
+}
+
+async function loadMigrateStatus() {
+  try {
+    const res = await fetch("/api/server/migrate/status")
+    migrateStatus.value = res.ok ? await res.json() : null
+  } catch {
+    migrateStatus.value = null
+  }
+}
 const validationErrors = ref<Record<string, string>>({})
 
 type LibraryStatus = "loading" | "ok" | "not_configured" | "error"
@@ -81,6 +113,7 @@ onMounted(async () => {
     const [settingsRes, librariesRes] = await Promise.all([
       fetch("/api/settings"),
       fetch("/api/libraries"),
+      loadMigrateStatus(),
     ])
     if (!handleResponse(settingsRes)) return
     const data = await settingsRes.json()
@@ -283,6 +316,46 @@ async function save() {
         </UCard>
       </section>
 
+      <!-- Poster migration (only when a second server is configured) -->
+      <section v-if="migrateStatus && migrateStatus.posterCount > 0">
+        <div class="mb-4">
+          <h2 class="text-base font-semibold text-white flex items-center gap-2">
+            <UIcon name="i-lucide-arrow-right-left" class="w-4 h-4 text-primary-500" />
+            Migrate posters
+          </h2>
+          <p class="text-sm text-neutral-500 mt-0.5">
+            Carry artwork imported from {{ migrateStatus.sourceName }} over to {{ server.name }}
+          </p>
+        </div>
+        <UCard variant="soft" class="bg-[#282828] border-neutral-700/50">
+          <div class="flex items-center gap-4">
+            <div class="flex-1 min-w-0">
+              <p class="text-sm text-neutral-300">
+                {{ migrateStatus.posterCount }} posters are still stored under
+                {{ migrateStatus.sourceName }}.
+              </p>
+              <p class="text-xs text-neutral-500 mt-1">
+                {{
+                  migrateStatus.available
+                    ? `Matched posters land in the queue for review — nothing is written to ${server.name} without your confirmation.`
+                    : migrateStatus.reason
+                }}
+              </p>
+            </div>
+            <UButton
+              size="sm"
+              variant="outline"
+              color="neutral"
+              icon="i-lucide-arrow-right-left"
+              :disabled="!migrateStatus.available"
+              @click="migrateModalOpen = true"
+            >
+              Migrate
+            </UButton>
+          </div>
+        </UCard>
+      </section>
+
       <!-- Libraries -->
       <section>
         <div class="mb-4">
@@ -463,5 +536,7 @@ async function save() {
 
       <p class="text-center text-xs text-neutral-600 pb-6">v{{ version }}</p>
     </div>
+
+    <MigratePostersModal v-model:open="migrateModalOpen" @migrated="onMigrated" />
   </div>
 </template>

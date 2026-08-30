@@ -120,8 +120,41 @@ server it came from, so switching `MEDIA_SERVER` hides the other server's data
 rather than deleting it — switch back and your previous library is still there.
 
 Since Plex and Jellyfin use different item identifiers, a switch requires a
-fresh import: the posters you already fetched stay on disk under `DATA_PATH`,
-but they are keyed by the previous server's IDs.
+fresh import from the new server.
+
+### Migrating your posters
+
+The artwork you already collected does not have to be rebuilt by hand. If both
+servers are configured — keep `PLEX_URL` / `PLEX_TOKEN` alongside your Jellyfin
+settings — a **Migrate posters** section appears in Settings.
+
+```yaml
+    environment:
+      MEDIA_SERVER: jellyfin
+      JELLYFIN_URL: http://192.168.1.x:8096
+      JELLYFIN_API_KEY: your-jellyfin-api-key
+      # Kept only so posters can be carried over:
+      PLEX_URL: http://192.168.1.x:32400
+      PLEX_TOKEN: your-plex-token
+```
+
+Import your new library first, then run the migration. Postr recognises the same
+title on both servers through the TMDB / IMDB / TVDB identifiers each of them
+stores, falling back to the title when there is none — which is the only option
+for collections, since no external database tracks them.
+
+Matched posters are placed in the **queue**, not pushed. You review them and
+choose when to send them, and your original posters are left untouched, so the
+migration can be repeated or abandoned at no cost — a second run only picks up
+what has changed. Anything that could not be matched with confidence — an
+ambiguous title, no counterpart on the new server — is listed at the end rather
+than guessed at.
+
+> **Collections usually will not match.** No external database tracks them, so
+> they are paired on their title alone. If your servers name them differently —
+> a translation, a `- Saga` suffix — they are reported as unmatched and you will
+> need to set those posters by hand. Movies, shows and seasons are unaffected:
+> they match on their TMDB / IMDB / TVDB identifiers regardless of language.
 
 ---
 
@@ -148,11 +181,17 @@ data/
 ├── logs/
 │   └── access.log    # HTTP access log (JSON)
 └── posters/
-    ├── movie/        # Movie posters
-    ├── show/         # TV series posters
-    ├── season/       # Season posters
-    └── collection/   # Collection posters
+    └── plex/         # One directory per media server
+        ├── movie/        # Movie posters
+        ├── show/         # TV series posters
+        ├── season/       # Season posters
+        └── collection/   # Collection posters
 ```
+
+Posters are grouped by the server they came from, so artwork from two servers
+never mixes. Libraries created before multi-server support stored them directly
+under `posters/{type}/`; Postr relocates those into `posters/plex/` on first
+start, and says so in its startup log.
 
 Application logs (startup, import, sync, errors) are written to **stdout**.
 

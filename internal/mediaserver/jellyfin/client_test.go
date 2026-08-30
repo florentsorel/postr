@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -121,7 +122,7 @@ func TestItems_SeasonsUseSeriesNameAndIndex(t *testing.T) {
 		t.Fatalf("Items: %v", err)
 	}
 	want := mediaserver.Item{ID: "s1", Title: "Breaking Bad", Year: 2008, SeasonNumber: 1, HasPoster: true}
-	if items[0] != want {
+	if !reflect.DeepEqual(items[0], want) {
 		t.Errorf("season:\n want %+v\n  got %+v", want, items[0])
 	}
 }

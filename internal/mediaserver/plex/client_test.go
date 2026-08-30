@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/florentsorel/postr/internal/mediaserver"
@@ -58,11 +59,12 @@ func seasonRoutes() map[string]string {
 	return map[string]string{
 		"/library/sections": `{"MediaContainer":{"Directory":[{"key":"1","type":"show","title":"TV"}]}}`,
 		"/library/sections/1/all": `{"MediaContainer":{"Metadata":[
-			{"ratingKey":"10","title":"Breaking Bad","year":2008,"thumb":"/thumb/10"}
+			{"ratingKey":"10","guid":"plex://show/5d9c081","title":"Breaking Bad","year":2008,"thumb":"/thumb/10",
+			 "Guid":[{"id":"imdb://tt0903747"},{"id":"tvdb://81189"}]}
 		]}}`,
 		"/library/metadata/10/children": `{"MediaContainer":{"Metadata":[
-			{"ratingKey":"201","title":"Season 1","index":1,"thumb":"/thumb/201"},
-			{"ratingKey":"202","title":"Season 2","index":2,"thumb":"/thumb/202"}
+			{"ratingKey":"201","guid":"plex://season/5d9c082","title":"Season 1","index":1,"thumb":"/thumb/201"},
+			{"ratingKey":"202","guid":"plex://season/5d9c083","title":"Season 2","index":2,"thumb":"/thumb/202"}
 		]}}`,
 		"/library/metadata/201/children": `{"MediaContainer":{"Metadata":[{"ratingKey":"301","originallyAvailableAt":"2008-01-20"}]}}`,
 		"/library/metadata/202/children": `{"MediaContainer":{"Metadata":[{"ratingKey":"401","originallyAvailableAt":"2009-03-08"}]}}`,
@@ -80,12 +82,13 @@ func TestItems_SeasonsCarryShowTitleNumberAndAirYear(t *testing.T) {
 		t.Fatalf("want 2 seasons, got %d", len(items))
 	}
 
+	showIDs := map[string]string{"imdb": "tt0903747", "tvdb": "81189"}
 	want := []mediaserver.Item{
-		{ID: "201", Title: "Breaking Bad", Year: 2008, SeasonNumber: 1, HasPoster: true},
-		{ID: "202", Title: "Breaking Bad", Year: 2009, SeasonNumber: 2, HasPoster: true},
+		{ID: "201", Title: "Breaking Bad", Year: 2008, SeasonNumber: 1, HasPoster: true, ExternalIDs: showIDs},
+		{ID: "202", Title: "Breaking Bad", Year: 2009, SeasonNumber: 2, HasPoster: true, ExternalIDs: showIDs},
 	}
 	for i, w := range want {
-		if items[i] != w {
+		if !reflect.DeepEqual(items[i], w) {
 			t.Errorf("season %d:\n want %+v\n  got %+v", i, w, items[i])
 		}
 	}
@@ -109,8 +112,9 @@ func TestItems_SeasonYearFallsBackToShowWhenNoEpisodes(t *testing.T) {
 func TestItems_MoviesMapHasPosterFromThumb(t *testing.T) {
 	srv := newServer(t, map[string]string{
 		"/library/sections/1/all": `{"MediaContainer":{"Metadata":[
-			{"ratingKey":"101","title":"Inception","year":2010,"addedAt":1600000000,"thumb":"/thumb/101"},
-			{"ratingKey":"102","title":"No Poster","year":1999}
+			{"ratingKey":"101","guid":"plex://movie/5d776831","title":"Inception","year":2010,"addedAt":1600000000,"thumb":"/thumb/101",
+			 "Guid":[{"id":"imdb://tt1375666"},{"id":"tmdb://27205"}]},
+			{"ratingKey":"102","guid":"plex://movie/5d776832","title":"No Poster","year":1999}
 		]}}`,
 	})
 
@@ -195,5 +199,63 @@ func TestPing_InvalidTokenIsUnauthorized(t *testing.T) {
 func TestGlobalCollectionsIsFalse(t *testing.T) {
 	if plex.NewClient("http://x", "tok").GlobalCollections() {
 		t.Error("Plex collections live inside sections; want false")
+	}
+}
+
+// TestItems_ParsesExternalGuids covers the payload Plex really sends: a
+// lowercase "guid" string next to the capitalised "Guid" array. Because
+// encoding/json matches keys case-insensitively as a fallback, a struct that
+// only declares "Guid" fails the whole decode on the string — which is exactly
+// how the migration broke.
+func TestItems_ParsesExternalGuids(t *testing.T) {
+	srv := newServer(t, map[string]string{
+		"/library/sections/1/all": `{"MediaContainer":{"Metadata":[
+			{"ratingKey":"101","guid":"plex://movie/5d776831","title":"Inception","year":2010,"thumb":"/t",
+			 "Guid":[{"id":"imdb://tt1375666"},{"id":"tmdb://27205"}]}
+		]}}`,
+	})
+
+	items, err := plex.NewClient(srv.URL, "tok").Items(context.Background(), "1", mediaserver.TypeMovie)
+	if err != nil {
+		t.Fatalf("Items: %v", err)
+	}
+
+	want := map[string]string{"imdb": "tt1375666", "tmdb": "27205"}
+	if !reflect.DeepEqual(items[0].ExternalIDs, want) {
+		t.Errorf("ExternalIDs = %v, want %v", items[0].ExternalIDs, want)
+	}
+	// Plex's own reference means nothing to another server and must be dropped.
+	if _, ok := items[0].ExternalIDs["plex"]; ok {
+		t.Error("the plex:// reference should not be kept as an external id")
+	}
+	// Both sources must be offered, so the item can meet a counterpart that
+	// only knows one of them.
+	wantKeys := []string{"movie|tmdb:27205", "movie|imdb:tt1375666"}
+	if got := items[0].MatchKeys(mediaserver.TypeMovie); !reflect.DeepEqual(got, wantKeys) {
+		t.Errorf("MatchKeys = %v, want %v", got, wantKeys)
+	}
+}
+
+// TestItems_NoGuidsIsNotAnError covers a server that answers without the array
+// at all — matching then falls back to titles rather than failing.
+func TestItems_NoGuidsIsNotAnError(t *testing.T) {
+	srv := newServer(t, map[string]string{
+		"/library/sections/1/all": `{"MediaContainer":{"Metadata":[
+			{"ratingKey":"101","guid":"plex://movie/5d776831","title":"Inception","year":2010,"thumb":"/t"}
+		]}}`,
+	})
+
+	items, err := plex.NewClient(srv.URL, "tok").Items(context.Background(), "1", mediaserver.TypeMovie)
+	if err != nil {
+		t.Fatalf("Items: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	if items[0].ExternalIDs != nil {
+		t.Errorf("ExternalIDs = %v, want nil", items[0].ExternalIDs)
+	}
+	if items[0].Title != "Inception" {
+		t.Errorf("the item should still decode: %+v", items[0])
 	}
 }

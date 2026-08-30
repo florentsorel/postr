@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/florentsorel/postr/internal/db"
@@ -275,12 +274,11 @@ func (h *Handler) savePoster(ctx context.Context, mediaType, itemID string) (str
 		return "", err
 	}
 
-	dir := filepath.Join(h.config.DataPath, "posters", mediaType)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(h.posterDir(mediaType), 0o755); err != nil {
 		return "", err
 	}
 
-	dest := filepath.Join(dir, itemID+"."+ext)
+	dest := h.posterPath(mediaType, itemID, ext)
 
 	if existing, err := os.ReadFile(dest); err == nil && bytes.Equal(existing, data) {
 		return ext, errPosterUnchanged

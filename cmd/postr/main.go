@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/florentsorel/postr/internal/mediaserver"
 	"github.com/florentsorel/postr/internal/mediaserver/jellyfin"
 	"github.com/florentsorel/postr/internal/mediaserver/plex"
+	"github.com/florentsorel/postr/internal/posters"
 	"github.com/florentsorel/postr/internal/web"
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
@@ -66,6 +68,23 @@ func main() {
 		},
 	}))
 
+	// Posters written before multi-server support lived at posters/{type}/ with
+	// no provider segment, and every one of them came from Plex — the same
+	// assumption database migration 00005 makes when it backfills the provider
+	// column. Relocate them once, then never again.
+	switch moved, err := posters.MigrateLegacyLayout(cfg.DataPath, mediaserver.ProviderPlex); {
+	case err != nil:
+		var skipped *posters.SkippedError
+		if !errors.As(err, &skipped) {
+			slog.Error("failed to migrate poster layout", "error", err)
+			os.Exit(1)
+		}
+		slog.Warn("legacy posters left in place: a file already exists at their destination",
+			"moved", moved, "left", len(skipped.Files))
+	case moved > 0:
+		slog.Info("posters moved to the per-provider layout", "moved", moved, "provider", mediaserver.ProviderPlex)
+	}
+
 	conn, err := db.Open(cfg.DBPath)
 	if err != nil {
 		slog.Error("failed to open database", "error", err)
@@ -86,7 +105,20 @@ func main() {
 	}
 	slog.Info("media server", "provider", cfg.MediaServer, "configured", cfg.ServerConfigured())
 
-	h := handler.New(db.New(conn), cfg, serverClient)
+	// The inactive server, when its credentials are also present. It is only
+	// ever used to carry posters over from a previous server.
+	var sourceClient mediaserver.Client
+	switch {
+	case cfg.MediaServer == mediaserver.ProviderJellyfin && cfg.PlexURL != "" && cfg.PlexToken != "":
+		sourceClient = plex.NewClient(cfg.PlexURL, cfg.PlexToken)
+	case cfg.MediaServer == mediaserver.ProviderPlex && cfg.JellyfinURL != "" && cfg.JellyfinAPIKey != "":
+		sourceClient = jellyfin.NewClient(cfg.JellyfinURL, cfg.JellyfinAPIKey)
+	}
+	if sourceClient != nil {
+		slog.Info("poster migration available", "from", sourceClient.Provider(), "to", cfg.MediaServer)
+	}
+
+	h := handler.New(db.New(conn), cfg, serverClient).WithSource(sourceClient)
 
 	// Public auth routes
 	e.POST("/api/auth/login", h.Login)
@@ -116,6 +148,8 @@ func main() {
 	api.GET("/server/ping", h.PingServer)
 	api.POST("/server/import", h.ImportFromServer)
 	api.POST("/server/sync", h.SyncFromServer)
+	api.GET("/server/migrate/status", h.GetMigrateStatus)
+	api.POST("/server/migrate", h.MigratePosters)
 
 	// SPA fallback — serve embedded frontend for all non-API routes
 	e.GET("/*", echo.WrapHandler(web.Handler()))

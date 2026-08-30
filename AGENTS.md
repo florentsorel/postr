@@ -52,9 +52,37 @@ Provider differences the abstraction absorbs:
 
 Because Jellyfin keeps every collection in one top-level folder, `GlobalCollections()` tells the import to anchor collections to that folder once instead of importing them per selected movie library.
 
+### Provider isolation on disk
+
+`internal/posters` owns the layout: `{DATA_PATH}/posters/{provider}/{type}/{itemID}.{ext}`. Every path in the handlers goes through `posterDir` / `posterPath`, never `filepath.Join` on its own.
+
+Postr predates multi-server support and used to write `posters/{type}/` with no provider segment. `posters.MigrateLegacyLayout` relocates those files into `posters/plex/` at startup — Plex being the only server that layout could have come from, the same assumption migration `00005` makes. It is idempotent, and it refuses to overwrite an existing destination file, reporting a `SkippedError` instead.
+
 ### Provider isolation in the database
 
 `libraries`, `media` and `library_settings` all carry a `provider` column (default `'plex'`, backfilled by migration `00005`). Reads are scoped to the active provider, so switching `MEDIA_SERVER` hides the other server's data instead of deleting it. `rating_key` stays globally unique — Plex ratingKeys and Jellyfin GUIDs never collide in practice, and keeping the constraint simple avoids threading the provider through every lookup.
+
+---
+
+## Poster Migration
+
+When both servers are configured, posters imported from the inactive one can be carried over to the active one. `main.go` builds a second `mediaserver.Client` for the inactive provider and hands it to the handler via `WithSource`; nothing else in the app reads from it.
+
+- `internal/migrate` holds the pairing logic as a pure function — no network, no filesystem — so every failure mode is reproducible in a test.
+- Items are matched on the TMDB / IMDB / TVDB identifiers both servers expose (`mediaserver.Item.ExternalIDs`, filled by `includeGuids=1` on Plex and `Fields=ProviderIds` on Jellyfin). Seasons carry their **series'** identifiers plus a season number, because neither server assigns external IDs to a season. Collections carry none and can only be matched by title.
+- Titles are the fallback. `NormalizeTitle` strips case, punctuation and a trailing `(2021)`, which is how a Plex `Invincible (2021)` meets a Jellyfin `Invincible`.
+- **A pairing that is not unique on either side is refused, never guessed.** Writing the wrong artwork over a title is worse than leaving it to the user, so ambiguous candidates are reported instead.
+- The universe of items comes from the database (that is what says which posters are actually on disk); the servers are only queried for identifiers.
+- Matched posters are copied to the target's directory and **queued** — the migration never uploads. The source posters are left in place, so a migration can be repeated or abandoned freely.
+- The copy skips a destination that already holds identical bytes, so re-running is a quiet no-op instead of re-queueing everything. This holds only while the server stores uploads verbatim; one that re-encodes them will look changed on the next run.
+
+### Collections are the weak spot
+
+Measured on a real 517-item Plex library migrated to Jellyfin: movies 93%, shows 90%, seasons 92%, **collections 0%**.
+
+Plex exposes no external identifier for a collection, and Jellyfin's are commonly auto-created from TMDB under localized names (`Sing` on one side, `Tous en scène - Saga` on the other). With neither a shared id nor a comparable title, every collection is reported unmatched. That is the designed refusal-to-guess working, but the outcome is useless, so the confirm screen warns about it up front rather than leaving the user to discover it in the report.
+
+Matching collections by their **members** — translating a collection's movies through the movie matches already established — would fix this. It is not implemented.
 
 ---
 
@@ -71,7 +99,7 @@ Because Jellyfin keeps every collection in one top-level folder, `GlobalCollecti
 - Imported media metadata is stored locally in SQLite (title, type, year, `added_at` timestamp from the server), tagged with the active `provider`.
 - The import streams real-time progress via SSE (`text/event-stream`). The frontend reads the stream and displays a progress bar + final recap.
 - Import stats: **Added** (new items), **Skipped** (existing items whose poster is byte-identical — DB is not touched), **Deleted** (items removed from the server). Thumbnail download failures appear in a separate errors accordion.
-- During import, the current server-side poster for each item is **downloaded and stored locally** at `/data/posters/{type}/{ratingKey}.jpg`. The filename is the server's own item ID (Plex `ratingKey` or Jellyfin GUID). Thumbnails are never served directly from server URLs (which require auth) — they are served by the Go backend at `/api/media/{ratingKey}/thumb`.
+- During import, the current server-side poster for each item is **downloaded and stored locally** at `/data/posters/{provider}/{type}/{itemID}.jpg`. The filename is the server's own item ID (Plex `ratingKey` or Jellyfin GUID). Thumbnails are never served directly from server URLs (which require auth) — they are served by the Go backend at `/api/media/{ratingKey}/thumb`.
 - Smart comparison: for existing items, the poster is downloaded and compared byte-for-byte before any DB write. If identical, the item is counted as skipped and the DB upsert is skipped entirely.
 - Collections on Jellyfin are imported once from the server-wide box set folder, not once per selected movie library.
 
@@ -192,6 +220,7 @@ The following features are **not implemented in V1**. Code stubs and detailed sp
 | Variable           | Description                                                          |
 | ------------------ | -------------------------------------------------------------------- |
 | `MEDIA_SERVER`     | Active server: `plex` or `jellyfin`. Inferred when unset (see above)  |
+|                    | Configuring *both* servers enables poster migration between them      |
 | `PLEX_URL`         | Base URL of the Plex Media Server                                    |
 | `PLEX_TOKEN`       | Plex authentication token                                            |
 | `JELLYFIN_URL`     | Base URL of the Jellyfin server                                      |
@@ -231,6 +260,8 @@ The application is packaged as a single Docker image containing both the Go back
 | `GET`    | `/api/server/ping`                 | Test connectivity and credential validity          |
 | `POST`   | `/api/server/import`               | Import media from the server (SSE stream)          |
 | `POST`   | `/api/server/sync`                 | Sync poster changes from the server (SSE stream)   |
+| `GET`    | `/api/server/migrate/status`       | Whether posters can be carried over, and how many  |
+| `POST`   | `/api/server/migrate`              | Carry posters to the active server (SSE stream)    |
 
 ---
 
@@ -248,9 +279,11 @@ postr/
 │   │   ├── queries/       # sqlc query definitions
 │   │   └── *.sql.go       # Generated sqlc code
 │   ├── handler/           # HTTP handlers (Echo v5), provider-agnostic
-│   └── mediaserver/       # Provider-neutral Client contract + shared types
-│       ├── plex/          # Plex implementation
-│       └── jellyfin/      # Jellyfin implementation
+│   ├── mediaserver/       # Provider-neutral Client contract + shared types
+│   │   ├── plex/          # Plex implementation
+│   │   └── jellyfin/      # Jellyfin implementation
+│   ├── migrate/           # Pure cross-server item pairing (no I/O)
+│   └── posters/           # On-disk poster layout + legacy relocation
 ├── web/                   # Vue 3 + Vite frontend
 │   └── src/
 │       ├── components/

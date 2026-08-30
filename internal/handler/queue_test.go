@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/florentsorel/postr/internal/db"
+	"github.com/florentsorel/postr/internal/mediaserver"
+	"github.com/florentsorel/postr/internal/posters"
 	"github.com/labstack/echo/v5"
 )
 
@@ -33,7 +35,7 @@ func simulateLocalChange(t *testing.T, setup *testSetup, ratingKey, mediaType st
 	t.Helper()
 	ctx := context.Background()
 
-	dir := filepath.Join(setup.dataPath, "posters", mediaType)
+	dir := posters.Dir(setup.dataPath, mediaserver.ProviderPlex, mediaType)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}

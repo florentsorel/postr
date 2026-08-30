@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/florentsorel/postr/internal/mediaserver"
@@ -61,6 +62,42 @@ type item struct {
 	AddedAt               int64  `json:"addedAt"`
 	Index                 int    `json:"index"`                 // season number
 	OriginallyAvailableAt string `json:"originallyAvailableAt"` // e.g. "2014-01-13"
+	// GuidString is Plex's own opaque reference, e.g. "plex://movie/5d7768...".
+	// It is useless to another server, but it MUST be declared: Plex sends both
+	// "guid" (this string) and "Guid" (the array below), and encoding/json falls
+	// back to case-insensitive key matching. Without an exact match for the
+	// lowercase key it would land on Guid and fail the whole decode with
+	// "cannot unmarshal string into ... []struct".
+	GuidString string `json:"guid"`
+	// Guid holds external database references such as "tmdb://27205". Plex only
+	// fills it when the request asks with includeGuids=1.
+	Guid []struct {
+		ID string `json:"id"`
+	} `json:"Guid"`
+}
+
+// externalIDs turns Plex's "source://id" references into a source-keyed map.
+func (i item) externalIDs() map[string]string {
+	if len(i.Guid) == 0 {
+		return nil
+	}
+	ids := make(map[string]string, len(i.Guid))
+	for _, g := range i.Guid {
+		source, id, ok := strings.Cut(g.ID, "://")
+		if !ok || id == "" {
+			continue
+		}
+		// Plex's own "plex://movie/5d77..." reference means nothing to another
+		// server, so it is not worth keeping.
+		if source = strings.ToLower(source); source == "plex" {
+			continue
+		}
+		ids[source] = id
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	return ids
 }
 
 // seasonYear returns the year from OriginallyAvailableAt if set, otherwise
@@ -110,7 +147,7 @@ func (c *Client) Libraries(ctx context.Context) ([]mediaserver.Library, error) {
 func (c *Client) Items(ctx context.Context, libraryKey, mediaType string) ([]mediaserver.Item, error) {
 	switch mediaType {
 	case mediaserver.TypeMovie, mediaserver.TypeShow:
-		raw, err := c.sectionItems(ctx, "/library/sections/"+libraryKey+"/all")
+		raw, err := c.sectionItems(ctx, "/library/sections/"+libraryKey+"/all?includeGuids=1")
 		if err != nil {
 			return nil, err
 		}
@@ -118,6 +155,8 @@ func (c *Client) Items(ctx context.Context, libraryKey, mediaType string) ([]med
 
 	case mediaserver.TypeCollection:
 		raw, err := c.sectionItems(ctx, "/library/sections/"+libraryKey+"/collections")
+		// Plex tracks no external database reference for a collection, so these
+		// items are matched by title alone.
 		if err != nil {
 			return nil, err
 		}
@@ -135,7 +174,7 @@ func (c *Client) Items(ctx context.Context, libraryKey, mediaType string) ([]med
 // expose the season air date on the season itself, so the year is taken from
 // the first episode and falls back to the show's year.
 func (c *Client) seasons(ctx context.Context, libraryKey string) ([]mediaserver.Item, error) {
-	shows, err := c.sectionItems(ctx, "/library/sections/"+libraryKey+"/all")
+	shows, err := c.sectionItems(ctx, "/library/sections/"+libraryKey+"/all?includeGuids=1")
 	if err != nil {
 		return nil, err
 	}
@@ -158,6 +197,9 @@ func (c *Client) seasons(ctx context.Context, libraryKey string) ([]mediaserver.
 				SeasonNumber: s.Index,
 				AddedAt:      s.AddedAt,
 				HasPoster:    s.Thumb != "",
+				// Plex does not give a season its own external reference, so a
+				// season is identified by its show plus its season number.
+				ExternalIDs: show.externalIDs(),
 			})
 		}
 	}
@@ -176,11 +218,12 @@ func convert(raw []item) []mediaserver.Item {
 	out := make([]mediaserver.Item, 0, len(raw))
 	for _, i := range raw {
 		out = append(out, mediaserver.Item{
-			ID:        i.RatingKey,
-			Title:     i.Title,
-			Year:      i.Year,
-			AddedAt:   i.AddedAt,
-			HasPoster: i.Thumb != "",
+			ID:          i.RatingKey,
+			Title:       i.Title,
+			Year:        i.Year,
+			AddedAt:     i.AddedAt,
+			HasPoster:   i.Thumb != "",
+			ExternalIDs: i.externalIDs(),
 		})
 	}
 	return out
