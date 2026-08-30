@@ -13,6 +13,7 @@ import HelpModal from "../components/HelpModal.vue"
 import ErrorLayout from "../components/ErrorLayout.vue"
 import { useLibraryUiStore } from "@/stores/useLibraryUiStore"
 import { useQueueStore } from "@/stores/useQueueStore"
+import { useServerStore } from "@/stores/useServerStore"
 import { useAuthStore } from "@/stores/useAuthStore"
 
 type MediaType = "all" | "movie" | "show" | "season" | "collection" | "orphan"
@@ -35,6 +36,7 @@ const route = useRoute()
 const router = useRouter()
 const uiStore = useLibraryUiStore()
 const queueStore = useQueueStore()
+const server = useServerStore()
 const authStore = useAuthStore()
 
 async function logout() {
@@ -176,16 +178,16 @@ const helpModalOpen = ref(false)
 const menuItems = computed<DropdownMenuItem[][]>(() => {
   const items: DropdownMenuItem[] = [
     {
-      label: "Import from Plex",
+      label: `Import from ${server.name}`,
       icon: "i-lucide-refresh-cw",
       onSelect: () => {
         importModalOpen.value = true
       },
     },
   ]
-  if (plexConfigured.value && activeItems.value.length > 0) {
+  if (server.configured && activeItems.value.length > 0) {
     items.push({
-      label: "Sync from Plex",
+      label: `Sync from ${server.name}`,
       icon: "i-lucide-scan-search",
       onSelect: () => {
         syncModalOpen.value = true
@@ -225,15 +227,16 @@ defineShortcuts({
     searchInput.value?.inputRef?.focus()
   },
 })
-const plexConfigured = ref<boolean | null>(null)
 
 onMounted(async () => {
   loading.value = true
   try {
-    const [statusRes, mediaRes, settingsRes] = await Promise.all([
-      fetch("/api/plex/status"),
+    const [mediaRes, settingsRes] = await Promise.all([
       fetch("/api/media"),
       fetch("/api/settings"),
+      // Normally already resolved by the router guard; refreshed here in case
+      // the page was reached without one (e.g. a hot reload).
+      server.load(),
     ])
 
     if (settingsRes.ok) {
@@ -247,8 +250,6 @@ onMounted(async () => {
       return
     }
 
-    plexConfigured.value = statusRes.ok ? (await statusRes.json()).configured : false
-
     if (mediaRes.ok) {
       mediaItems.value = await mediaRes.json()
     }
@@ -261,14 +262,14 @@ onMounted(async () => {
 })
 const toast = useToast()
 
-async function sendToPlex(item: MediaItem) {
+async function sendToServer(item: MediaItem) {
   try {
     const { orphaned } = await queueStore.pushOne(item.ratingKey)
     if (orphaned) {
       item.isOrphan = true
       toast.add({
-        title: "Media not found in Plex",
-        description: "This item no longer exists in Plex and has been moved to the Orphaned tab.",
+        title: `Media not found in ${server.name}`,
+        description: `This item no longer exists in ${server.name} and has been moved to the Orphaned tab.`,
         color: "warning",
         icon: "i-lucide-unlink",
       })
@@ -277,7 +278,7 @@ async function sendToPlex(item: MediaItem) {
     }
   } catch (e) {
     toast.add({
-      title: "Failed to push to Plex",
+      title: `Failed to push to ${server.name}`,
       description: e instanceof Error ? e.message : undefined,
       color: "error",
       icon: "i-lucide-circle-x",
@@ -285,7 +286,7 @@ async function sendToPlex(item: MediaItem) {
   }
 }
 
-async function getFromPlex(item: MediaItem) {
+async function getFromServer(item: MediaItem) {
   try {
     const { thumb, warning, orphaned } = await queueStore.removeItem(item.ratingKey)
     const found = mediaItems.value.find((m) => m.ratingKey === item.ratingKey)
@@ -293,8 +294,8 @@ async function getFromPlex(item: MediaItem) {
       if (orphaned) {
         found.isOrphan = true
         toast.add({
-          title: "Media not found in Plex",
-          description: "This item no longer exists in Plex and has been moved to the Orphaned tab.",
+          title: `Media not found in ${server.name}`,
+          description: `This item no longer exists in ${server.name} and has been moved to the Orphaned tab.`,
           color: "warning",
           icon: "i-lucide-unlink",
         })
@@ -303,7 +304,7 @@ async function getFromPlex(item: MediaItem) {
         found.locallyModified = false
         if (warning) {
           toast.add({
-            title: "Could not restore Plex poster",
+            title: `Could not restore the ${server.name} poster`,
             description: warning,
             color: "warning",
             icon: "i-lucide-alert-triangle",
@@ -313,7 +314,7 @@ async function getFromPlex(item: MediaItem) {
     }
   } catch (e) {
     toast.add({
-      title: "Could not restore Plex poster",
+      title: `Could not restore the ${server.name} poster`,
       description: e instanceof Error ? e.message : undefined,
       color: "error",
       icon: "i-lucide-circle-x",
@@ -526,7 +527,7 @@ function onSyncOrphaned(ratingKeys: string[]) {
       </UDropdownMenu>
 
       <div class="ml-auto hidden sm:flex items-center gap-3">
-        <UTooltip text="Import library from Plex and download posters">
+        <UTooltip :text="`Import library from ${server.name} and download posters`">
           <UButton
             icon="i-lucide-refresh-cw"
             variant="outline"
@@ -534,12 +535,12 @@ function onSyncOrphaned(ratingKeys: string[]) {
             size="sm"
             @click="importModalOpen = true"
           >
-            Import from Plex
+            Import from {{ server.name }}
           </UButton>
         </UTooltip>
         <UTooltip
-          v-if="plexConfigured && activeItems.length > 0"
-          text="Detect poster changes made directly in Plex"
+          v-if="server.configured && activeItems.length > 0"
+          :text="`Detect poster changes made directly in ${server.name}`"
         >
           <UButton
             icon="i-lucide-scan-search"
@@ -548,10 +549,10 @@ function onSyncOrphaned(ratingKeys: string[]) {
             size="sm"
             @click="syncModalOpen = true"
           >
-            Sync from Plex
+            Sync from {{ server.name }}
           </UButton>
         </UTooltip>
-        <UTooltip v-if="queueStore.count > 0" text="Posters pending push to Plex">
+        <UTooltip v-if="queueStore.count > 0" :text="`Posters pending push to ${server.name}`">
           <UButton
             icon="i-lucide-upload-cloud"
             variant="ghost"
@@ -603,14 +604,15 @@ function onSyncOrphaned(ratingKeys: string[]) {
           <div>
             <h2 class="text-xl font-semibold text-white">No media imported yet</h2>
             <p class="text-sm text-neutral-500 mt-2 max-w-sm">
-              Connect to your Plex server and import your library to start managing poster artwork.
+              Connect to your {{ server.name }} server and import your library to start managing
+              poster artwork.
             </p>
           </div>
           <UButton icon="i-lucide-refresh-cw" size="lg" @click="importModalOpen = true">
-            Import from Plex
+            Import from {{ server.name }}
           </UButton>
-          <p v-if="plexConfigured === false" class="text-xs text-neutral-600">
-            Plex server not configured —
+          <p v-if="server.configured === false" class="text-xs text-neutral-600">
+            {{ server.name }} server not configured —
             <UButton to="/settings" variant="link" color="primary" size="xs" class="px-0">
               open Settings
             </UButton>
@@ -710,8 +712,8 @@ function onSyncOrphaned(ratingKeys: string[]) {
             :locally-modified="item.locallyModified"
             :is-orphan="item.isOrphan"
             @change-poster="openPosterModal(item)"
-            @send-to-plex="sendToPlex(item)"
-            @get-from-plex="getFromPlex(item)"
+            @send-to-server="sendToServer(item)"
+            @get-from-server="getFromServer(item)"
             @delete-orphan="deleteOrphan(item)"
             @drop-file="onDropFile(item, $event)"
           />

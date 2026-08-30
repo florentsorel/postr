@@ -7,12 +7,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/florentsorel/postr/internal/db"
-	"github.com/florentsorel/postr/internal/plex"
+	"github.com/florentsorel/postr/internal/mediaserver"
 	"github.com/labstack/echo/v5"
 	"golang.org/x/sync/semaphore"
 )
@@ -26,7 +25,7 @@ type queueItemResponse struct {
 }
 
 func (h *Handler) GetQueue(c *echo.Context) error {
-	rows, err := h.db.ListPosterQueueWithMedia(c.Request().Context())
+	rows, err := h.db.ListPosterQueueWithMedia(c.Request().Context(), h.provider())
 	if err != nil {
 		return jsonInternalError(c, err)
 	}
@@ -59,12 +58,10 @@ func (h *Handler) RemoveFromQueue(c *echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Ping first so config errors leave the queue intact.
-	if h.plex != nil {
-		if _, pingErr := h.plex.Sections(ctx); pingErr != nil {
-			if errors.Is(pingErr, plex.ErrUnauthorized) {
-				return jsonError(c, http.StatusBadGateway, "Could not restore the Plex poster. Invalid Plex token — check your PLEX_TOKEN setting.")
-			}
-			return jsonError(c, http.StatusBadGateway, "Could not restore the Plex poster. Unable to reach Plex — check your PLEX_URL setting.")
+	if h.server != nil {
+		if pingErr := h.server.Ping(ctx); pingErr != nil {
+			return jsonError(c, http.StatusBadGateway,
+				h.connectionErrorMessage("Could not restore the "+h.serverName()+" poster.", pingErr))
 		}
 	}
 
@@ -74,16 +71,15 @@ func (h *Handler) RemoveFromQueue(c *echo.Context) error {
 
 	resp := removeQueueResponse{Thumb: "/api/media/" + ratingKey + "/thumb"}
 
-	if h.plex != nil {
+	if h.server != nil {
 		m, err := h.db.GetMediaByRatingKey(ctx, ratingKey)
 		if err == nil {
 			now := time.Now().Unix()
-			thumbPath := "/library/metadata/" + ratingKey + "/thumb"
-			ext, saveErr := h.saveThumb(ctx, m.Type, ratingKey, thumbPath)
-			if saveErr != nil && !errors.Is(saveErr, errThumbUnchanged) {
-				slog.Warn("failed to restore Plex poster", "title", m.Title, "ratingKey", ratingKey, "error", saveErr)
-				resp.Warning = "Could not restore the Plex poster. The media may no longer exist in Plex."
-				if errors.Is(saveErr, plex.ErrNotFound) {
+			ext, saveErr := h.savePoster(ctx, m.Type, ratingKey)
+			if saveErr != nil && !errors.Is(saveErr, errPosterUnchanged) {
+				slog.Warn("failed to restore poster", "title", m.Title, "ratingKey", ratingKey, "error", saveErr)
+				resp.Warning = "Could not restore the " + h.serverName() + " poster. The media may no longer exist in " + h.serverName() + "."
+				if errors.Is(saveErr, mediaserver.ErrNotFound) {
 					resp.Orphaned = true
 					_ = h.db.MarkOrphan(ctx, db.MarkOrphanParams{
 						RatingKey: ratingKey,
@@ -116,8 +112,8 @@ func (h *Handler) RemoveFromQueue(c *echo.Context) error {
 }
 
 func (h *Handler) PushPoster(c *echo.Context) error {
-	if h.plex == nil {
-		return jsonError(c, http.StatusBadRequest, "Plex is not configured")
+	if h.server == nil {
+		return jsonError(c, http.StatusBadRequest, h.serverName()+" is not configured")
 	}
 	ratingKey := c.Param("ratingKey")
 	ctx := c.Request().Context()
@@ -135,34 +131,32 @@ func (h *Handler) PushPoster(c *echo.Context) error {
 		ext = m.Thumb.String
 	}
 
-	path := filepath.Join(h.config.DataPath, "posters", m.Type, ratingKey+"."+ext)
+	path := h.posterPath(m.Type, ratingKey, ext)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return jsonError(c, http.StatusNotFound, "poster file not found")
 	}
 
-	if _, pingErr := h.plex.Sections(ctx); pingErr != nil {
-		if errors.Is(pingErr, plex.ErrUnauthorized) {
-			return jsonError(c, http.StatusBadGateway, "Failed to push poster to Plex. Invalid Plex token — check your PLEX_TOKEN setting.")
-		}
-		return jsonError(c, http.StatusBadGateway, "Failed to push poster to Plex. Unable to reach Plex — check your PLEX_URL setting.")
+	if pingErr := h.server.Ping(ctx); pingErr != nil {
+		return jsonError(c, http.StatusBadGateway,
+			h.connectionErrorMessage("Failed to push poster to "+h.serverName()+".", pingErr))
 	}
 
-	slog.Info("pushing poster to Plex", "type", m.Type, "title", m.Title, "ratingKey", ratingKey)
-	if err := h.plex.UploadPoster(ctx, ratingKey, data, plex.ContentTypeFromExt(ext)); err != nil {
-		slog.Error("failed to push poster to Plex", "title", m.Title, "ratingKey", ratingKey, "error", err)
-		if errors.Is(err, plex.ErrNotFound) {
+	slog.Info("pushing poster", "provider", h.provider(), "type", m.Type, "title", m.Title, "ratingKey", ratingKey)
+	if err := h.server.UploadPoster(ctx, ratingKey, data, mediaserver.ContentTypeFromExt(ext)); err != nil {
+		slog.Error("failed to push poster", "title", m.Title, "ratingKey", ratingKey, "error", err)
+		if errors.Is(err, mediaserver.ErrNotFound) {
 			now := time.Now().Unix()
 			_ = h.db.MarkOrphan(ctx, db.MarkOrphanParams{RatingKey: ratingKey, UpdatedAt: now})
 			_ = h.db.DeletePosterQueueByRatingKey(ctx, ratingKey)
 			return c.JSON(http.StatusGone, map[string]any{
-				"error":    "The media no longer exists in Plex.",
+				"error":    "The media no longer exists in " + h.serverName() + ".",
 				"orphaned": true,
 			})
 		}
-		return jsonError(c, http.StatusBadGateway, "Failed to push poster to Plex. The media may no longer exist.")
+		return jsonError(c, http.StatusBadGateway, "Failed to push poster to "+h.serverName()+". The media may no longer exist.")
 	}
-	slog.Info("poster pushed to Plex", "type", m.Type, "title", m.Title)
+	slog.Info("poster pushed", "provider", h.provider(), "type", m.Type, "title", m.Title)
 
 	if err := h.db.DeletePosterQueueByRatingKey(ctx, ratingKey); err != nil {
 		return jsonInternalError(c, err)
@@ -177,18 +171,18 @@ func (h *Handler) PushPoster(c *echo.Context) error {
 		return jsonInternalError(c, err)
 	}
 
-	h.resyncLocalThumb(ctx, m.Type, ratingKey, now)
+	h.resyncLocalPoster(ctx, m.Type, ratingKey, now)
 
 	return c.NoContent(http.StatusNoContent)
 }
 
 func (h *Handler) PushAllPosters(c *echo.Context) error {
-	if h.plex == nil {
-		return jsonError(c, http.StatusBadRequest, "Plex is not configured")
+	if h.server == nil {
+		return jsonError(c, http.StatusBadRequest, h.serverName()+" is not configured")
 	}
 	ctx := c.Request().Context()
 
-	rows, err := h.db.ListPosterQueueWithMedia(ctx)
+	rows, err := h.db.ListPosterQueueWithMedia(ctx, h.provider())
 	if err != nil {
 		return jsonInternalError(c, err)
 	}
@@ -216,7 +210,7 @@ func (h *Handler) PushAllPosters(c *echo.Context) error {
 			}
 			defer sem.Release(1)
 
-			path := filepath.Join(h.config.DataPath, "posters", rType, ratingKey+"."+thumbStr)
+			path := h.posterPath(rType, ratingKey, thumbStr)
 			data, err := os.ReadFile(path)
 			if err != nil {
 				mu.Lock()
@@ -225,7 +219,7 @@ func (h *Handler) PushAllPosters(c *echo.Context) error {
 				return
 			}
 
-			if err := h.plex.UploadPoster(ctx, ratingKey, data, plex.ContentTypeFromExt(thumbStr)); err != nil {
+			if err := h.server.UploadPoster(ctx, ratingKey, data, mediaserver.ContentTypeFromExt(thumbStr)); err != nil {
 				slog.Error("push all: failed to push poster", "ratingKey", ratingKey, "error", err)
 				mu.Lock()
 				results[i] = result{RatingKey: ratingKey, Error: err.Error()}
@@ -241,13 +235,22 @@ func (h *Handler) PushAllPosters(c *echo.Context) error {
 			}
 
 			now := time.Now().Unix()
-			_ = h.db.SetLocallyModified(ctx, db.SetLocallyModifiedParams{
+			// Leaving this flag set would show the item as still differing from
+			// the server and hide it from the next sync, even though the push
+			// went through — so it is reported rather than swallowed.
+			if err := h.db.SetLocallyModified(ctx, db.SetLocallyModifiedParams{
 				LocallyModified: 0,
 				UpdatedAt:       now,
 				RatingKey:       ratingKey,
-			})
+			}); err != nil {
+				slog.Error("push all: poster pushed but failed to clear locally_modified", "ratingKey", ratingKey, "error", err)
+				mu.Lock()
+				results[i] = result{RatingKey: ratingKey, Error: "push succeeded but the item is still marked as locally modified: " + err.Error()}
+				mu.Unlock()
+				return
+			}
 
-			h.resyncLocalThumb(ctx, rType, ratingKey, now)
+			h.resyncLocalPoster(ctx, rType, ratingKey, now)
 
 			mu.Lock()
 			results[i] = result{RatingKey: ratingKey}
@@ -265,14 +268,14 @@ func (h *Handler) PushAllPosters(c *echo.Context) error {
 	return c.JSON(http.StatusOK, results)
 }
 
-// resyncLocalThumb re-downloads the poster from Plex after a successful push
-// so the local copy matches what Plex actually stores (Plex may re-encode the
-// image). This prevents false "changed" detections on the next sync.
-func (h *Handler) resyncLocalThumb(ctx context.Context, mediaType, ratingKey string, updatedAt int64) {
-	thumbPath := "/library/metadata/" + ratingKey + "/thumb"
-	newExt, err := h.saveThumb(ctx, mediaType, ratingKey, thumbPath)
-	if err != nil {
-		slog.Warn("resyncLocalThumb: failed to re-download poster from Plex — next sync may report a false change", "ratingKey", ratingKey, "error", err)
+// resyncLocalPoster re-downloads the poster from the media server after a
+// successful push so the local copy matches what the server actually stores
+// (both Plex and Jellyfin may re-encode the image). This prevents false
+// "changed" detections on the next sync.
+func (h *Handler) resyncLocalPoster(ctx context.Context, mediaType, ratingKey string, updatedAt int64) {
+	newExt, err := h.savePoster(ctx, mediaType, ratingKey)
+	if err != nil && !errors.Is(err, errPosterUnchanged) {
+		slog.Warn("resyncLocalPoster: failed to re-download poster — next sync may report a false change", "ratingKey", ratingKey, "error", err)
 		return
 	}
 	if err := h.db.UpdateMediaThumb(ctx, db.UpdateMediaThumbParams{
@@ -280,6 +283,6 @@ func (h *Handler) resyncLocalThumb(ctx context.Context, mediaType, ratingKey str
 		UpdatedAt: updatedAt,
 		RatingKey: ratingKey,
 	}); err != nil {
-		slog.Warn("resyncLocalThumb: failed to update thumb in DB", "ratingKey", ratingKey, "error", err)
+		slog.Warn("resyncLocalPoster: failed to update thumb in DB", "ratingKey", ratingKey, "error", err)
 	}
 }

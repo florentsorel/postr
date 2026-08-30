@@ -1,16 +1,17 @@
 -- name: UpsertLibrary :one
-INSERT INTO libraries (section_key, title, type, imported_at)
-VALUES (?, ?, ?, ?)
-ON CONFLICT (section_key) DO UPDATE SET
+INSERT INTO libraries (provider, section_key, title, type, imported_at)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (provider, section_key) DO UPDATE SET
     title       = excluded.title,
     type        = excluded.type,
     imported_at = excluded.imported_at
 RETURNING *;
 
 -- name: UpsertMedia :exec
-INSERT INTO media (library_id, rating_key, title, type, year, season_number, thumb, locally_modified, added_at, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+INSERT INTO media (provider, library_id, rating_key, title, type, year, season_number, thumb, locally_modified, added_at, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
 ON CONFLICT (rating_key) DO UPDATE SET
+    provider         = excluded.provider,
     title            = excluded.title,
     type             = excluded.type,
     year             = excluded.year,
@@ -24,6 +25,7 @@ ON CONFLICT (rating_key) DO UPDATE SET
 -- name: ListMedia :many
 SELECT id, library_id, rating_key, title, type, year, season_number, thumb, locally_modified, is_orphan, added_at, created_at, updated_at
 FROM media
+WHERE provider = ?
 ORDER BY added_at DESC NULLS LAST;
 
 -- name: GetMediaByRatingKey :one

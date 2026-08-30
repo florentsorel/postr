@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue"
 import { readSSEStream } from "@/composables/useSSEStream"
+import { useServerStore } from "@/stores/useServerStore"
 import MediaItemRow from "./MediaItemRow.vue"
+
+const server = useServerStore()
 
 type PingStatus = "idle" | "loading" | "ok" | "error"
 type Phase = "confirm" | "checking" | "done"
@@ -42,17 +45,17 @@ const progressPercent = computed(() =>
 async function checkConnection() {
   pingStatus.value = "loading"
   try {
-    const res = await fetch("/api/plex/ping")
+    const res = await fetch("/api/server/ping")
     const data = await res.json()
     if (data.reachable) {
       pingStatus.value = "ok"
     } else {
       pingStatus.value = "error"
-      pingError.value = data.error ?? "Unable to reach Plex server."
+      pingError.value = data.error ?? `Unable to reach ${server.name} server.`
     }
   } catch {
     pingStatus.value = "error"
-    pingError.value = "Unable to reach Plex server."
+    pingError.value = `Unable to reach ${server.name} server.`
   }
 }
 
@@ -74,7 +77,7 @@ watch(
 
 async function confirm() {
   phase.value = "checking"
-  await readSSEStream("/api/plex/sync", { method: "POST" }, handleEvent)
+  await readSSEStream("/api/server/sync", { method: "POST" }, handleEvent)
   if (phase.value === "checking") phase.value = "done"
 }
 
@@ -120,10 +123,10 @@ function close() {
   <UModal
     :open="open"
     class="select-none"
-    title="Sync from Plex"
+    :title="`Sync from ${server.name}`"
     :description="
       phase === 'checking'
-        ? 'Comparing local posters with Plex…'
+        ? `Comparing local posters with ${server.name}…`
         : phase === 'done'
           ? changedItems.length === 0 && failedItems.length === 0
             ? `All posters are up to date (${progress.total} checked)`
@@ -135,7 +138,7 @@ function close() {
               ]
                 .filter(Boolean)
                 .join(' · ')
-          : 'Compare local posters with Plex and update any that have changed.'
+          : `Compare local posters with ${server.name} and update any that have changed.`
     "
     :close="phase !== 'checking'"
     :dismissible="phase !== 'checking'"
@@ -151,14 +154,14 @@ function close() {
         <!-- Loading -->
         <div v-if="pingStatus === 'loading'" class="flex items-center gap-2 text-sm px-1">
           <UIcon name="i-lucide-loader-circle" class="w-4 h-4 text-neutral-400 animate-spin" />
-          <span class="text-neutral-400">Checking Plex connection…</span>
+          <span class="text-neutral-400">Checking {{ server.name }} connection…</span>
         </div>
 
         <!-- OK -->
         <template v-else-if="pingStatus === 'ok'">
           <p class="text-sm text-neutral-300">
-            This will compare all local posters with Plex and update any that have changed directly
-            in Plex. Only items not modified locally will be checked.
+            This will compare all local posters with {{ server.name }} and update any that have
+            changed directly in {{ server.name }}. Only items not modified locally will be checked.
           </p>
           <p class="text-sm text-neutral-400">Do you want to proceed?</p>
         </template>

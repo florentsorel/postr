@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/florentsorel/postr/internal/db"
 	"github.com/florentsorel/postr/internal/config"
+	"github.com/florentsorel/postr/internal/db"
 	"github.com/florentsorel/postr/internal/handler"
-	"github.com/florentsorel/postr/internal/plex"
+	"github.com/florentsorel/postr/internal/mediaserver"
 	"github.com/labstack/echo/v5"
 )
 
@@ -22,12 +22,12 @@ type testSetup struct {
 	dataPath string
 }
 
-func newTestSetup(t *testing.T, plexClient handler.PlexClient) *testSetup {
+func newTestSetup(t *testing.T, client mediaserver.Client) *testSetup {
 	t.Helper()
-	return newTestSetupWithCfg(t, &config.Config{}, plexClient)
+	return newTestSetupWithCfg(t, &config.Config{}, client)
 }
 
-func newTestSetupWithCfg(t *testing.T, cfg *config.Config, plexClient handler.PlexClient) *testSetup {
+func newTestSetupWithCfg(t *testing.T, cfg *config.Config, client mediaserver.Client) *testSetup {
 	t.Helper()
 	conn, err := db.Open(":memory:")
 	if err != nil {
@@ -35,9 +35,13 @@ func newTestSetupWithCfg(t *testing.T, cfg *config.Config, plexClient handler.Pl
 	}
 	t.Cleanup(func() { conn.Close() })
 	cfg.DataPath = t.TempDir()
+	// config.Load resolves this; tests build Config literals directly.
+	if cfg.MediaServer == "" {
+		cfg.MediaServer = mediaserver.ProviderPlex
+	}
 	queries := db.New(conn)
 	return &testSetup{
-		handler:  handler.New(queries, cfg, plexClient),
+		handler:  handler.New(queries, cfg, client),
 		queries:  queries,
 		dataPath: cfg.DataPath,
 	}
@@ -68,43 +72,74 @@ func decodeJSON[T any](t *testing.T, body []byte) T {
 	return v
 }
 
-// mockPlex is a configurable Plex client for tests.
-type mockPlex struct {
-	sectionsFunc      func(ctx context.Context) ([]plex.Section, error)
-	allItemsFunc      func(ctx context.Context, sectionKey string) ([]plex.Item, error)
-	childrenFunc      func(ctx context.Context, ratingKey string) ([]plex.Item, error)
-	collectionsFunc   func(ctx context.Context, sectionKey string) ([]plex.Item, error)
-	downloadThumbFunc func(ctx context.Context, thumbPath string) ([]byte, string, error)
-	uploadPosterFunc  func(ctx context.Context, ratingKey string, data []byte, contentType string) error
+// mockServer is a configurable mediaserver.Client for tests. Unset funcs fall
+// back to benign defaults so each test only wires up what it exercises.
+type mockServer struct {
+	provider          string
+	globalCollections bool
+	pingFunc          func(ctx context.Context) error
+	librariesFunc     func(ctx context.Context) ([]mediaserver.Library, error)
+	itemsFunc         func(ctx context.Context, libraryKey, mediaType string) ([]mediaserver.Item, error)
+	downloadFunc      func(ctx context.Context, itemID string) ([]byte, string, error)
+	uploadFunc        func(ctx context.Context, itemID string, data []byte, contentType string) error
 }
 
-func (m *mockPlex) Sections(ctx context.Context) ([]plex.Section, error) {
-	return m.sectionsFunc(ctx)
-}
-func (m *mockPlex) AllItems(ctx context.Context, sectionKey string) ([]plex.Item, error) {
-	return m.allItemsFunc(ctx, sectionKey)
-}
-func (m *mockPlex) Children(ctx context.Context, ratingKey string) ([]plex.Item, error) {
-	if m.childrenFunc != nil {
-		return m.childrenFunc(ctx, ratingKey)
+func (m *mockServer) Provider() string {
+	if m.provider != "" {
+		return m.provider
 	}
-	return nil, nil
+	return mediaserver.ProviderPlex
 }
-func (m *mockPlex) Collections(ctx context.Context, sectionKey string) ([]plex.Item, error) {
-	if m.collectionsFunc != nil {
-		return m.collectionsFunc(ctx, sectionKey)
+
+func (m *mockServer) Name() string {
+	if m.Provider() == mediaserver.ProviderJellyfin {
+		return "Jellyfin"
 	}
-	return nil, nil
+	return "Plex"
 }
-func (m *mockPlex) DownloadThumb(ctx context.Context, thumbPath string) ([]byte, string, error) {
-	if m.downloadThumbFunc != nil {
-		return m.downloadThumbFunc(ctx, thumbPath)
+
+func (m *mockServer) GlobalCollections() bool { return m.globalCollections }
+
+// Ping defaults to whatever Libraries reports, mirroring the real clients where
+// a failing listing means an unreachable server.
+func (m *mockServer) Ping(ctx context.Context) error {
+	if m.pingFunc != nil {
+		return m.pingFunc(ctx)
 	}
-	return []byte("fake-poster"), "jpg", nil
-}
-func (m *mockPlex) UploadPoster(ctx context.Context, ratingKey string, data []byte, contentType string) error {
-	if m.uploadPosterFunc != nil {
-		return m.uploadPosterFunc(ctx, ratingKey, data, contentType)
+	if m.librariesFunc != nil {
+		_, err := m.librariesFunc(ctx)
+		return err
 	}
 	return nil
 }
+
+func (m *mockServer) Libraries(ctx context.Context) ([]mediaserver.Library, error) {
+	if m.librariesFunc != nil {
+		return m.librariesFunc(ctx)
+	}
+	return nil, nil
+}
+
+func (m *mockServer) Items(ctx context.Context, libraryKey, mediaType string) ([]mediaserver.Item, error) {
+	if m.itemsFunc != nil {
+		return m.itemsFunc(ctx, libraryKey, mediaType)
+	}
+	return nil, nil
+}
+
+func (m *mockServer) DownloadPoster(ctx context.Context, itemID string) ([]byte, string, error) {
+	if m.downloadFunc != nil {
+		return m.downloadFunc(ctx, itemID)
+	}
+	return []byte("fake-poster"), "jpg", nil
+}
+
+func (m *mockServer) UploadPoster(ctx context.Context, itemID string, data []byte, contentType string) error {
+	if m.uploadFunc != nil {
+		return m.uploadFunc(ctx, itemID, data, contentType)
+	}
+	return nil
+}
+
+// Ensure *mockServer satisfies mediaserver.Client (compile-time check).
+var _ mediaserver.Client = (*mockServer)(nil)

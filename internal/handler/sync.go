@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/florentsorel/postr/internal/db"
-	"github.com/florentsorel/postr/internal/plex"
+	"github.com/florentsorel/postr/internal/mediaserver"
 	"github.com/labstack/echo/v5"
 )
 
@@ -38,9 +38,9 @@ type sseSyncFailedEvent struct {
 	Orphaned  bool   `json:"orphaned,omitempty"`
 }
 
-func (h *Handler) SyncFromPlex(c *echo.Context) error {
-	if h.plex == nil {
-		return jsonError(c, http.StatusBadRequest, "Plex is not configured")
+func (h *Handler) SyncFromServer(c *echo.Context) error {
+	if h.server == nil {
+		return jsonError(c, http.StatusBadRequest, h.serverName()+" is not configured")
 	}
 
 	resp := c.Response()
@@ -57,7 +57,7 @@ func (h *Handler) SyncFromPlex(c *echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
-	media, err := h.db.ListMedia(ctx)
+	media, err := h.db.ListMedia(ctx, h.provider())
 	if err != nil {
 		send(sseErrorEvent{Type: "error", Message: "failed to list media"})
 		return nil
@@ -76,21 +76,20 @@ func (h *Handler) SyncFromPlex(c *echo.Context) error {
 
 	var changed, failed int
 	for i, m := range toCheck {
-		thumbPath := "/library/metadata/" + m.RatingKey + "/thumb"
-		ext, saveErr := h.saveThumb(ctx, m.Type, m.RatingKey, thumbPath)
-		if errors.Is(saveErr, errThumbUnchanged) {
+		ext, saveErr := h.savePoster(ctx, m.Type, m.RatingKey)
+		if errors.Is(saveErr, errPosterUnchanged) {
 			send(sseProgressEvent{Type: "progress", Current: i + 1, Total: len(toCheck)})
 			continue
 		}
 		if saveErr != nil {
-			slog.Warn("sync: failed to download thumb", "title", m.Title, "ratingKey", m.RatingKey, "error", saveErr)
+			slog.Warn("sync: failed to download poster", "title", m.Title, "ratingKey", m.RatingKey, "error", saveErr)
 			reason := "Failed to download poster"
-			if errors.Is(saveErr, plex.ErrNotFound) {
-				reason = "No longer exists in Plex"
+			if errors.Is(saveErr, mediaserver.ErrNotFound) {
+				reason = "No longer exists in " + h.serverName()
 				_ = h.db.MarkOrphan(ctx, db.MarkOrphanParams{RatingKey: m.RatingKey, UpdatedAt: time.Now().Unix()})
 			}
 			failed++
-			send(sseSyncFailedEvent{Type: "failed", RatingKey: m.RatingKey, Title: m.Title, Reason: reason, Orphaned: errors.Is(saveErr, plex.ErrNotFound)})
+			send(sseSyncFailedEvent{Type: "failed", RatingKey: m.RatingKey, Title: m.Title, Reason: reason, Orphaned: errors.Is(saveErr, mediaserver.ErrNotFound)})
 			send(sseProgressEvent{Type: "progress", Current: i + 1, Total: len(toCheck)})
 			continue
 		}

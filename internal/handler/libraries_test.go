@@ -6,8 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/florentsorel/postr/internal/handler"
-	"github.com/florentsorel/postr/internal/plex"
+	"github.com/florentsorel/postr/internal/mediaserver"
 )
 
 func TestGetLibraries(t *testing.T) {
@@ -23,7 +22,7 @@ func TestGetLibraries(t *testing.T) {
 		Libraries  []libItem `json:"libraries"`
 	}
 
-	t.Run("plex not configured", func(t *testing.T) {
+	t.Run("server not configured", func(t *testing.T) {
 		setup := newTestSetup(t, nil)
 		rec, c := newCtx(t, http.MethodGet, "/api/libraries", "")
 
@@ -36,9 +35,9 @@ func TestGetLibraries(t *testing.T) {
 		}
 	})
 
-	t.Run("plex unreachable", func(t *testing.T) {
-		mock := &mockPlex{
-			sectionsFunc: func(ctx context.Context) ([]plex.Section, error) {
+	t.Run("server unreachable", func(t *testing.T) {
+		mock := &mockServer{
+			librariesFunc: func(ctx context.Context) ([]mediaserver.Library, error) {
 				return nil, errors.New("connection timeout")
 			},
 		}
@@ -61,9 +60,9 @@ func TestGetLibraries(t *testing.T) {
 	})
 
 	t.Run("invalid token", func(t *testing.T) {
-		mock := &mockPlex{
-			sectionsFunc: func(ctx context.Context) ([]plex.Section, error) {
-				return nil, plex.ErrUnauthorized
+		mock := &mockServer{
+			librariesFunc: func(ctx context.Context) ([]mediaserver.Library, error) {
+				return nil, mediaserver.ErrUnauthorized
 			},
 		}
 		setup := newTestSetup(t, mock)
@@ -79,9 +78,9 @@ func TestGetLibraries(t *testing.T) {
 	})
 
 	t.Run("enabled by default when no DB state exists", func(t *testing.T) {
-		mock := &mockPlex{
-			sectionsFunc: func(ctx context.Context) ([]plex.Section, error) {
-				return []plex.Section{
+		mock := &mockServer{
+			librariesFunc: func(ctx context.Context) ([]mediaserver.Library, error) {
+				return []mediaserver.Library{
 					{Key: "1", Type: "movie", Title: "Movies"},
 					{Key: "2", Type: "show", Title: "TV Series"},
 				}, nil
@@ -105,9 +104,9 @@ func TestGetLibraries(t *testing.T) {
 	})
 
 	t.Run("filters out non-movie/show types", func(t *testing.T) {
-		mock := &mockPlex{
-			sectionsFunc: func(ctx context.Context) ([]plex.Section, error) {
-				return []plex.Section{
+		mock := &mockServer{
+			librariesFunc: func(ctx context.Context) ([]mediaserver.Library, error) {
+				return []mediaserver.Library{
 					{Key: "1", Type: "movie", Title: "Movies"},
 					{Key: "2", Type: "music", Title: "Music"},
 					{Key: "3", Type: "photo", Title: "Photos"},
@@ -130,9 +129,9 @@ func TestGetLibraries(t *testing.T) {
 	})
 
 	t.Run("respects saved disabled state", func(t *testing.T) {
-		mock := &mockPlex{
-			sectionsFunc: func(ctx context.Context) ([]plex.Section, error) {
-				return []plex.Section{
+		mock := &mockServer{
+			librariesFunc: func(ctx context.Context) ([]mediaserver.Library, error) {
+				return []mediaserver.Library{
 					{Key: "1", Type: "movie", Title: "Movies"},
 				}, nil
 			},
@@ -161,9 +160,9 @@ func TestGetLibraries(t *testing.T) {
 
 func TestSaveLibraries(t *testing.T) {
 	t.Run("round-trip enabled state", func(t *testing.T) {
-		mock := &mockPlex{
-			sectionsFunc: func(ctx context.Context) ([]plex.Section, error) {
-				return []plex.Section{
+		mock := &mockServer{
+			librariesFunc: func(ctx context.Context) ([]mediaserver.Library, error) {
+				return []mediaserver.Library{
 					{Key: "1", Type: "movie", Title: "Movies"},
 					{Key: "2", Type: "show", Title: "TV"},
 				}, nil
@@ -215,6 +214,3 @@ func TestSaveLibraries(t *testing.T) {
 		}
 	})
 }
-
-// Ensure *mockPlex satisfies handler.PlexClient (compile-time check).
-var _ handler.PlexClient = (*mockPlex)(nil)

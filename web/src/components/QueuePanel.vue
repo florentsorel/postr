@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue"
 import { useQueueStore } from "@/stores/useQueueStore"
+import { useServerStore } from "@/stores/useServerStore"
 import MediaItemRow from "./MediaItemRow.vue"
 
 defineProps<{ open: boolean }>()
@@ -10,6 +11,7 @@ const emit = defineEmits<{
 }>()
 
 const queue = useQueueStore()
+const server = useServerStore()
 const pushingAll = ref(false)
 const pushingItem = ref<string | null>(null)
 const error = ref<string | null>(null)
@@ -44,7 +46,7 @@ async function pushOne(ratingKey: string) {
     :open="open"
     class="select-none"
     title="Pending posters"
-    :description="`${queue.count} item${queue.count !== 1 ? 's' : ''} waiting to be pushed to Plex`"
+    :description="`${queue.count} item${queue.count !== 1 ? 's' : ''} waiting to be pushed to ${server.name}`"
     @update:open="$emit('update:open', $event)"
   >
     <template #body>
@@ -65,7 +67,7 @@ async function pushOne(ratingKey: string) {
           :season-number="item.seasonNumber"
         >
           <div class="flex items-center gap-2 shrink-0">
-            <UTooltip text="Send to Plex">
+            <UTooltip :text="`Send to ${server.name}`">
               <UButton
                 icon="i-lucide-upload"
                 size="xs"
@@ -76,7 +78,7 @@ async function pushOne(ratingKey: string) {
                 @click="pushOne(item.ratingKey)"
               />
             </UTooltip>
-            <UTooltip text="Remove from queue and restore poster from Plex">
+            <UTooltip :text="`Remove from queue and restore poster from ${server.name}`">
               <UButton
                 icon="i-lucide-x"
                 size="xs"
@@ -107,7 +109,7 @@ async function pushOne(ratingKey: string) {
           />
           <UButton
             v-if="queue.count > 0"
-            label="Push all to Plex"
+            :label="`Push all to ${server.name}`"
             icon="i-lucide-upload"
             :loading="pushingAll"
             @click="pushAll"

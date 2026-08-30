@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/florentsorel/postr/internal/handler"
-	"github.com/florentsorel/postr/internal/plex"
+	"github.com/florentsorel/postr/internal/mediaserver"
 	"github.com/labstack/echo/v5"
 )
 
@@ -24,12 +24,12 @@ type importResult struct {
 func runImport(t *testing.T, h *handler.Handler, body string) importResult {
 	t.Helper()
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/api/plex/import", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/server/import", strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	if err := h.ImportFromPlex(c); err != nil {
-		t.Fatalf("ImportFromPlex: %v", err)
+	if err := h.ImportFromServer(c); err != nil {
+		t.Fatalf("ImportFromServer: %v", err)
 	}
 	return parseSSEDone(t, rec.Body.Bytes())
 }
@@ -59,19 +59,19 @@ func parseSSEDone(t *testing.T, body []byte) importResult {
 }
 
 var (
-	testSection = plex.Section{Key: "1", Type: "movie", Title: "Movies"}
-	testItems   = []plex.Item{
-		{RatingKey: "101", Title: "Inception", Thumb: "/thumb/101"},
-		{RatingKey: "102", Title: "The Matrix", Thumb: "/thumb/102"},
+	testLibrary = mediaserver.Library{Key: "1", Type: mediaserver.TypeMovie, Title: "Movies"}
+	testItems   = []mediaserver.Item{
+		{ID: "101", Title: "Inception", HasPoster: true},
+		{ID: "102", Title: "The Matrix", HasPoster: true},
 	}
 )
 
-func defaultMock() *mockPlex {
-	return &mockPlex{
-		sectionsFunc: func(ctx context.Context) ([]plex.Section, error) {
-			return []plex.Section{testSection}, nil
+func defaultMock() *mockServer {
+	return &mockServer{
+		librariesFunc: func(ctx context.Context) ([]mediaserver.Library, error) {
+			return []mediaserver.Library{testLibrary}, nil
 		},
-		allItemsFunc: func(ctx context.Context, sectionKey string) ([]plex.Item, error) {
+		itemsFunc: func(ctx context.Context, libraryKey, mediaType string) ([]mediaserver.Item, error) {
 			return testItems, nil
 		},
 	}
@@ -124,10 +124,10 @@ func TestImport_Deleted(t *testing.T) {
 		t.Fatalf("setup: want Added=2 on first import, got %d", first.Added)
 	}
 
-	mock.allItemsFunc = func(ctx context.Context, sectionKey string) ([]plex.Item, error) {
+	mock.itemsFunc = func(ctx context.Context, libraryKey, mediaType string) ([]mediaserver.Item, error) {
 		return testItems[:1], nil
 	}
-	mock.downloadThumbFunc = func(ctx context.Context, thumbPath string) ([]byte, string, error) {
+	mock.downloadFunc = func(ctx context.Context, itemID string) ([]byte, string, error) {
 		return []byte("updated-poster"), "jpg", nil
 	}
 

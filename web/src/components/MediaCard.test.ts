@@ -2,6 +2,7 @@ import { render, screen, fireEvent, createEvent } from "@testing-library/vue"
 import { userEvent } from "@testing-library/user-event"
 import { describe, it, expect } from "vitest"
 import MediaCard from "./MediaCard.vue"
+import { useServerStore } from "@/stores/useServerStore"
 
 function drop(element: Element, file: File) {
   const event = createEvent.drop(element)
@@ -67,7 +68,7 @@ describe("MediaCard", () => {
     expect(emitted("changePoster")).toHaveLength(1)
   })
 
-  it("hides Send to Plex when not in queue", () => {
+  it("hides Send to server when not in queue", () => {
     render(MediaCard, {
       props: { title: "Inception", type: "movie", inQueue: false },
       global: { stubs },
@@ -76,17 +77,17 @@ describe("MediaCard", () => {
     expect(screen.queryByText("Send to Plex")).not.toBeInTheDocument()
   })
 
-  it("emits sendToPlex when Send to Plex is clicked and inQueue", async () => {
+  it("emits sendToServer when Send to server is clicked and inQueue", async () => {
     const { emitted } = render(MediaCard, {
       props: { title: "Inception", type: "movie", inQueue: true },
       global: { stubs },
     })
 
     await userEvent.click(screen.getAllByText("Send to Plex")[0])
-    expect(emitted("sendToPlex")).toHaveLength(1)
+    expect(emitted("sendToServer")).toHaveLength(1)
   })
 
-  it("hides Get from Plex when not locally modified", () => {
+  it("hides Get from server when not locally modified", () => {
     render(MediaCard, {
       props: { title: "Inception", type: "movie", locallyModified: false },
       global: { stubs },
@@ -95,14 +96,14 @@ describe("MediaCard", () => {
     expect(screen.queryByText("Get from Plex")).not.toBeInTheDocument()
   })
 
-  it("emits getFromPlex when Get from Plex is clicked and locallyModified", async () => {
+  it("emits getFromServer when Get from server is clicked and locallyModified", async () => {
     const { emitted } = render(MediaCard, {
       props: { title: "Inception", type: "movie", locallyModified: true },
       global: { stubs },
     })
 
     await userEvent.click(screen.getAllByText("Get from Plex")[0])
-    expect(emitted("getFromPlex")).toHaveLength(1)
+    expect(emitted("getFromServer")).toHaveLength(1)
   })
 
   it.each([
@@ -179,5 +180,18 @@ describe("MediaCard", () => {
 
       expect(emitted("dropFile")).toBeUndefined()
     })
+  })
+
+  it("labels the server actions with the configured server name", () => {
+    useServerStore().name = "Jellyfin"
+
+    render(MediaCard, {
+      props: { title: "Inception", type: "movie", inQueue: true, locallyModified: true },
+      global: { stubs },
+    })
+
+    expect(screen.getAllByText("Send to Jellyfin")[0]).toBeInTheDocument()
+    expect(screen.getAllByText("Get from Jellyfin")[0]).toBeInTheDocument()
+    expect(screen.queryByText("Send to Plex")).not.toBeInTheDocument()
   })
 })

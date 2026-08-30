@@ -1,12 +1,24 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue"
+import { ref, computed, onMounted } from "vue"
 import { useRouter } from "vue-router"
 import { useApiError } from "@/composables/useApiError"
 import { useAuthStore } from "@/stores/useAuthStore"
+import { useServerStore } from "@/stores/useServerStore"
+import MigratePostersModal from "@/components/MigratePostersModal.vue"
 const version = import.meta.env.VITE_APP_VERSION ?? "unknown"
 
 const router = useRouter()
 const authStore = useAuthStore()
+const server = useServerStore()
+
+// Everything about the media server section is derived from the active
+// provider, so the page reads correctly whichever server is configured.
+const isJellyfin = computed(() => server.provider === "jellyfin")
+const urlEnvVar = computed(() => (isJellyfin.value ? "JELLYFIN_URL" : "PLEX_URL"))
+const tokenEnvVar = computed(() => (isJellyfin.value ? "JELLYFIN_API_KEY" : "PLEX_TOKEN"))
+const urlExample = computed(() =>
+  isJellyfin.value ? "http://192.168.1.x:8096" : "http://192.168.1.x:32400"
+)
 
 async function logout() {
   await authStore.logout()
@@ -20,17 +32,17 @@ const pingError = ref("")
 async function testConnection() {
   pingStatus.value = "loading"
   try {
-    const res = await fetch("/api/plex/ping")
+    const res = await fetch("/api/server/ping")
     const data = await res.json()
     if (data.reachable) {
       pingStatus.value = "ok"
     } else {
       pingStatus.value = "error"
-      pingError.value = data.error ?? "Unable to reach Plex server."
+      pingError.value = data.error ?? `Unable to reach ${server.name} server.`
     }
   } catch {
     pingStatus.value = "error"
-    pingError.value = "Unable to reach Plex server."
+    pingError.value = `Unable to reach ${server.name} server.`
   }
 }
 
@@ -41,14 +53,46 @@ const loading = ref(true)
 
 // Read-only from env vars — fetched from backend
 const env = ref({
-  plexUrl: "",
-  plexTokenSet: false,
+  serverUrl: "",
+  serverTokenSet: false,
+  serverTokenLabel: "Token",
   authEnabled: false,
   authUser: "",
   authPassSet: false,
 })
 
 const options = ref({ autoResize: true, resizeWidth: 1000 })
+
+// Poster migration is only offered when a second server is configured and holds
+// artwork worth carrying over.
+const migrateModalOpen = ref(false)
+const migrateStatus = ref<{
+  available: boolean
+  sourceName: string
+  posterCount: number
+  reason?: string
+} | null>(null)
+
+// After a migration the posters sit in the queue, so the counts shown here are
+// stale until we ask again.
+async function onMigrated() {
+  await loadMigrateStatus()
+  toast.add({
+    title: "Posters migrated to the queue",
+    description: `Open the queue from the library to review them before pushing to ${server.name}.`,
+    color: "success",
+    icon: "i-lucide-check",
+  })
+}
+
+async function loadMigrateStatus() {
+  try {
+    const res = await fetch("/api/server/migrate/status")
+    migrateStatus.value = res.ok ? await res.json() : null
+  } catch {
+    migrateStatus.value = null
+  }
+}
 const validationErrors = ref<Record<string, string>>({})
 
 type LibraryStatus = "loading" | "ok" | "not_configured" | "error"
@@ -69,11 +113,13 @@ onMounted(async () => {
     const [settingsRes, librariesRes] = await Promise.all([
       fetch("/api/settings"),
       fetch("/api/libraries"),
+      loadMigrateStatus(),
     ])
     if (!handleResponse(settingsRes)) return
     const data = await settingsRes.json()
-    env.value.plexUrl = data.plex_url ?? ""
-    env.value.plexTokenSet = data.plex_token_set ?? false
+    env.value.serverUrl = data.server_url ?? ""
+    env.value.serverTokenSet = data.server_token_set ?? false
+    env.value.serverTokenLabel = data.server_token_label ?? "Token"
     env.value.authEnabled = data.auth_enabled ?? false
     env.value.authUser = data.auth_user ?? ""
     env.value.authPassSet = data.auth_pass_set ?? false
@@ -86,7 +132,7 @@ onMounted(async () => {
         libraryStatus.value = "not_configured"
       } else if (!libData.reachable) {
         libraryStatus.value = "error"
-        libraryError.value = libData.error ?? "Unable to reach Plex server."
+        libraryError.value = libData.error ?? `Unable to reach ${server.name} server.`
       } else {
         libraryStatus.value = "ok"
         libraries.value = libData.libraries ?? []
@@ -178,12 +224,12 @@ async function save() {
 
     <!-- Content -->
     <div class="max-w-2xl mx-auto px-6 py-10 flex flex-col gap-8">
-      <!-- Plex Server (read-only) -->
+      <!-- Media server (read-only) -->
       <section>
         <div class="mb-4">
           <h2 class="text-base font-semibold text-white flex items-center gap-2">
             <UIcon name="i-lucide-server" class="w-4 h-4 text-primary-500" />
-            Plex Server
+            {{ server.name }} Server
           </h2>
           <p class="text-sm text-neutral-500 mt-0.5">
             Configured via environment variables
@@ -199,25 +245,27 @@ async function save() {
               >
                 <UIcon name="i-lucide-globe" class="w-4 h-4 text-neutral-500 shrink-0" />
                 <span class="text-sm text-neutral-300 font-mono select-text">
-                  {{ env.plexUrl || "" }}
+                  {{ env.serverUrl || "" }}
                 </span>
               </div>
-              <p v-if="!env.plexUrl" class="text-xs text-neutral-500">
-                Set the <code class="text-neutral-400">PLEX_URL</code> environment variable — e.g.
-                <code class="text-neutral-400">http://192.168.1.x:32400</code>
+              <p v-if="!env.serverUrl" class="text-xs text-neutral-500">
+                Set the <code class="text-neutral-400">{{ urlEnvVar }}</code> environment variable —
+                e.g. <code class="text-neutral-400">{{ urlExample }}</code>
               </p>
             </div>
             <div class="flex flex-col gap-1">
-              <span class="text-xs font-medium text-neutral-400">Plex Token</span>
+              <span class="text-xs font-medium text-neutral-400">
+                {{ server.name }} {{ env.serverTokenLabel }}
+              </span>
               <div
                 class="flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/60 border border-neutral-700/50"
               >
                 <UIcon name="i-lucide-key" class="w-4 h-4 text-neutral-500 shrink-0" />
                 <span class="text-sm text-neutral-300 font-mono">
-                  {{ env.plexTokenSet ? "••••••••••••••••" : "" }}
+                  {{ env.serverTokenSet ? "••••••••••••••••" : "" }}
                 </span>
                 <UBadge
-                  v-if="env.plexTokenSet"
+                  v-if="env.serverTokenSet"
                   label="Set"
                   color="success"
                   variant="soft"
@@ -225,9 +273,14 @@ async function save() {
                   class="ml-auto"
                 />
               </div>
-              <p v-if="!env.plexTokenSet" class="text-xs text-neutral-500">
-                Set the <code class="text-neutral-400">PLEX_TOKEN</code> environment variable —
+              <p v-if="!env.serverTokenSet" class="text-xs text-neutral-500">
+                Set the <code class="text-neutral-400">{{ tokenEnvVar }}</code> environment variable
+                —
+                <template v-if="isJellyfin">
+                  create one in Jellyfin under Dashboard → Advanced → API Keys.
+                </template>
                 <a
+                  v-else
                   href="https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -248,7 +301,7 @@ async function save() {
                 </template>
               </div>
               <UButton
-                v-if="env.plexUrl && env.plexTokenSet"
+                v-if="env.serverUrl && env.serverTokenSet"
                 size="sm"
                 variant="outline"
                 color="neutral"
@@ -263,6 +316,46 @@ async function save() {
         </UCard>
       </section>
 
+      <!-- Poster migration (only when a second server is configured) -->
+      <section v-if="migrateStatus && migrateStatus.posterCount > 0">
+        <div class="mb-4">
+          <h2 class="text-base font-semibold text-white flex items-center gap-2">
+            <UIcon name="i-lucide-arrow-right-left" class="w-4 h-4 text-primary-500" />
+            Migrate posters
+          </h2>
+          <p class="text-sm text-neutral-500 mt-0.5">
+            Carry artwork imported from {{ migrateStatus.sourceName }} over to {{ server.name }}
+          </p>
+        </div>
+        <UCard variant="soft" class="bg-[#282828] border-neutral-700/50">
+          <div class="flex items-center gap-4">
+            <div class="flex-1 min-w-0">
+              <p class="text-sm text-neutral-300">
+                {{ migrateStatus.posterCount }} posters are still stored under
+                {{ migrateStatus.sourceName }}.
+              </p>
+              <p class="text-xs text-neutral-500 mt-1">
+                {{
+                  migrateStatus.available
+                    ? `Matched posters land in the queue for review — nothing is written to ${server.name} without your confirmation.`
+                    : migrateStatus.reason
+                }}
+              </p>
+            </div>
+            <UButton
+              size="sm"
+              variant="outline"
+              color="neutral"
+              icon="i-lucide-arrow-right-left"
+              :disabled="!migrateStatus.available"
+              @click="migrateModalOpen = true"
+            >
+              Migrate
+            </UButton>
+          </div>
+        </UCard>
+      </section>
+
       <!-- Libraries -->
       <section>
         <div class="mb-4">
@@ -271,7 +364,7 @@ async function save() {
             Libraries
           </h2>
           <p class="text-sm text-neutral-500 mt-0.5">
-            Choose which Plex libraries to include when importing
+            Choose which {{ server.name }} libraries to include when importing
           </p>
         </div>
         <UCard variant="soft" class="bg-[#282828] border-neutral-700/50">
@@ -281,7 +374,8 @@ async function save() {
             class="flex items-center gap-2 text-sm text-neutral-500"
           >
             <UIcon name="i-lucide-info" class="w-4 h-4 shrink-0" />
-            Configure your Plex server URL and token above to manage libraries.
+            Configure your {{ server.name }} server URL and {{ env.serverTokenLabel.toLowerCase() }}
+            above to manage libraries.
           </div>
 
           <!-- Loading -->
@@ -338,7 +432,7 @@ async function save() {
               <div>
                 <p class="text-sm font-medium text-white">Auto-resize images</p>
                 <p class="text-xs text-neutral-500">
-                  Automatically resize uploaded posters to Plex-compatible dimensions
+                  Automatically resize uploaded posters to server-compatible dimensions
                 </p>
               </div>
               <USwitch v-model="options.autoResize" class="ml-2 shrink-0" />
@@ -442,5 +536,7 @@ async function save() {
 
       <p class="text-center text-xs text-neutral-600 pb-6">v{{ version }}</p>
     </div>
+
+    <MigratePostersModal v-model:open="migrateModalOpen" @migrated="onMigrated" />
   </div>
 </template>
