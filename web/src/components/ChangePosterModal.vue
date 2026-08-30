@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue"
+import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue"
 import { isAllowedPosterMimeType } from "@/utils/poster"
 import PosterPreview from "./PosterPreview.vue"
 
@@ -118,6 +118,34 @@ async function resizeIfNeeded(file: File): Promise<Blob> {
 
 // -- From URL --
 const pastedUrl = ref("")
+
+// The preview is fetched through the backend rather than loaded straight into
+// the <img>: poster sites reject a request carrying Postr's own origin as
+// Referer, which the browser always sends and cannot be told not to.
+//
+// Debounced because the URL is typed (or pasted then edited), and every
+// intermediate value would otherwise send the server after a multi-megabyte
+// image nobody will look at.
+const debouncedUrl = ref("")
+let debounceTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(pastedUrl, (value) => {
+  clearTimeout(debounceTimer)
+  const trimmed = value.trim()
+  if (!/^https?:\/\//i.test(trimmed)) {
+    debouncedUrl.value = ""
+    return
+  }
+  debounceTimer = setTimeout(() => {
+    debouncedUrl.value = trimmed
+  }, 500)
+})
+
+onBeforeUnmount(() => clearTimeout(debounceTimer))
+
+const previewSrc = computed(() =>
+  debouncedUrl.value ? `/api/poster-preview?url=${encodeURIComponent(debouncedUrl.value)}` : ""
+)
 
 // -- Confirm --
 const canConfirm = computed(() => {
@@ -246,7 +274,7 @@ watch(
           size="lg"
           autofocus
         />
-        <PosterPreview v-if="pastedUrl.trim()" :src="pastedUrl.trim()" />
+        <PosterPreview v-if="previewSrc" :src="previewSrc" />
       </div>
     </template>
 
