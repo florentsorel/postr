@@ -44,9 +44,8 @@ func (q *Queries) ListLibrarySettings(ctx context.Context, provider string) ([]L
 const upsertLibrarySetting = `-- name: UpsertLibrarySetting :exec
 INSERT INTO library_settings (provider, section_key, enabled)
 VALUES (?, ?, ?)
-ON CONFLICT (section_key) DO UPDATE SET
-    provider = excluded.provider,
-    enabled  = excluded.enabled
+ON CONFLICT (provider, section_key) DO UPDATE SET
+    enabled = excluded.enabled
 `
 
 type UpsertLibrarySettingParams struct {

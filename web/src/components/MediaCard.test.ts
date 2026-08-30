@@ -1,7 +1,6 @@
 import { render, screen, fireEvent, createEvent } from "@testing-library/vue"
 import { userEvent } from "@testing-library/user-event"
 import { describe, it, expect } from "vitest"
-import { createPinia, setActivePinia } from "pinia"
 import MediaCard from "./MediaCard.vue"
 import { useServerStore } from "@/stores/useServerStore"
 
@@ -184,13 +183,11 @@ describe("MediaCard", () => {
   })
 
   it("labels the server actions with the configured server name", () => {
-    const pinia = createPinia()
-    setActivePinia(pinia)
     useServerStore().name = "Jellyfin"
 
     render(MediaCard, {
       props: { title: "Inception", type: "movie", inQueue: true, locallyModified: true },
-      global: { stubs, plugins: [pinia] },
+      global: { stubs },
     })
 
     expect(screen.getAllByText("Send to Jellyfin")[0]).toBeInTheDocument()

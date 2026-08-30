@@ -235,11 +235,20 @@ func (h *Handler) PushAllPosters(c *echo.Context) error {
 			}
 
 			now := time.Now().Unix()
-			_ = h.db.SetLocallyModified(ctx, db.SetLocallyModifiedParams{
+			// Leaving this flag set would show the item as still differing from
+			// the server and hide it from the next sync, even though the push
+			// went through — so it is reported rather than swallowed.
+			if err := h.db.SetLocallyModified(ctx, db.SetLocallyModifiedParams{
 				LocallyModified: 0,
 				UpdatedAt:       now,
 				RatingKey:       ratingKey,
-			})
+			}); err != nil {
+				slog.Error("push all: poster pushed but failed to clear locally_modified", "ratingKey", ratingKey, "error", err)
+				mu.Lock()
+				results[i] = result{RatingKey: ratingKey, Error: "push succeeded but the item is still marked as locally modified: " + err.Error()}
+				mu.Unlock()
+				return
+			}
 
 			h.resyncLocalPoster(ctx, rType, ratingKey, now)
 

@@ -210,12 +210,11 @@ func (q *Queries) UpdateMediaThumb(ctx context.Context, arg UpdateMediaThumbPara
 const upsertLibrary = `-- name: UpsertLibrary :one
 INSERT INTO libraries (provider, section_key, title, type, imported_at)
 VALUES (?, ?, ?, ?, ?)
-ON CONFLICT (section_key) DO UPDATE SET
-    provider    = excluded.provider,
+ON CONFLICT (provider, section_key) DO UPDATE SET
     title       = excluded.title,
     type        = excluded.type,
     imported_at = excluded.imported_at
-RETURNING id, section_key, title, type, imported_at, provider
+RETURNING id, provider, section_key, title, type, imported_at
 `
 
 type UpsertLibraryParams struct {
@@ -237,11 +236,11 @@ func (q *Queries) UpsertLibrary(ctx context.Context, arg UpsertLibraryParams) (L
 	var i Library
 	err := row.Scan(
 		&i.ID,
+		&i.Provider,
 		&i.SectionKey,
 		&i.Title,
 		&i.Type,
 		&i.ImportedAt,
-		&i.Provider,
 	)
 	return i, err
 }

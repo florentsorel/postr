@@ -1,8 +1,7 @@
 -- name: UpsertLibrary :one
 INSERT INTO libraries (provider, section_key, title, type, imported_at)
 VALUES (?, ?, ?, ?, ?)
-ON CONFLICT (section_key) DO UPDATE SET
-    provider    = excluded.provider,
+ON CONFLICT (provider, section_key) DO UPDATE SET
     title       = excluded.title,
     type        = excluded.type,
     imported_at = excluded.imported_at

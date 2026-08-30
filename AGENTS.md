@@ -60,7 +60,11 @@ Postr predates multi-server support and used to write `posters/{type}/` with no 
 
 ### Provider isolation in the database
 
-`libraries`, `media` and `library_settings` all carry a `provider` column (default `'plex'`, backfilled by migration `00005`). Reads are scoped to the active provider, so switching `MEDIA_SERVER` hides the other server's data instead of deleting it. `rating_key` stays globally unique — Plex ratingKeys and Jellyfin GUIDs never collide in practice, and keeping the constraint simple avoids threading the provider through every lookup.
+`libraries`, `media` and `library_settings` all carry a `provider` column (default `'plex'`, backfilled by migration `00005`). Reads are scoped to the active provider, so switching `MEDIA_SERVER` hides the other server's data instead of deleting it.
+
+The column alone is not enough: migration `00006` puts the provider *in the key* for `libraries` (`UNIQUE (provider, section_key)`) and `library_settings` (`PRIMARY KEY (provider, section_key)`). Without it, two servers sharing a section key would overwrite each other's row and flip its provider — the exact isolation the column exists to provide.
+
+`media.rating_key` stays globally unique. Every lookup (`GetMediaByRatingKey`, `MarkOrphan`, `UpdateMediaThumb`, `SetLocallyModified`, `DeletePosterQueueByRatingKey`) keys on it alone, so making it composite would thread the provider through each of them and their callers. Plex's integer ratingKeys cannot collide with Jellyfin's 32-hex GUIDs, so the risk is theoretical — but it is a real constraint on any future provider whose ids are plain integers.
 
 ---
 

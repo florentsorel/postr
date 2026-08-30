@@ -10,17 +10,17 @@ import (
 
 type Library struct {
 	ID         int64
+	Provider   string
 	SectionKey string
 	Title      string
 	Type       string
 	ImportedAt int64
-	Provider   string
 }
 
 type LibrarySetting struct {
+	Provider   string
 	SectionKey string
 	Enabled    int64
-	Provider   string
 }
 
 type Medium struct {
