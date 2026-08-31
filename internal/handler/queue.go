@@ -93,7 +93,10 @@ func (h *Handler) RemoveFromQueue(c *echo.Context) error {
 						RatingKey:       ratingKey,
 					})
 				}
-			} else if saveErr == nil {
+			} else {
+				// Also covers errPosterUnchanged: the server's poster is
+				// already byte-identical to the local file, so the restore is
+				// complete and the item must stop being flagged as modified.
 				_ = h.db.UpdateMediaThumb(ctx, db.UpdateMediaThumbParams{
 					Thumb:     sql.NullString{String: ext, Valid: true},
 					UpdatedAt: now,
