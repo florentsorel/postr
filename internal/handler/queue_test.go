@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/florentsorel/postr/internal/db"
+	"github.com/florentsorel/postr/internal/handler"
 	"github.com/florentsorel/postr/internal/mediaserver"
 	"github.com/florentsorel/postr/internal/posters"
 	"github.com/labstack/echo/v5"
@@ -99,5 +100,68 @@ func TestPushPoster_NoFalseSyncAfterReencode(t *testing.T) {
 
 	if result.Changed != 0 {
 		t.Errorf("Changed: want 0 after push+resync, got %d (false positives from server-side re-encoding)", result.Changed)
+	}
+}
+
+func runRemoveFromQueue(t *testing.T, h *handler.Handler, ratingKey string) removeQueueResult {
+	t.Helper()
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodDelete, "/api/queue/"+ratingKey, nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPathValues(echo.PathValues{{Name: "ratingKey", Value: ratingKey}})
+	if err := h.RemoveFromQueue(c); err != nil {
+		t.Fatalf("RemoveFromQueue: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("RemoveFromQueue: want 200, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	return decodeJSON[removeQueueResult](t, rec.Body.Bytes())
+}
+
+type removeQueueResult struct {
+	Thumb    string `json:"thumb"`
+	Warning  string `json:"warning"`
+	Orphaned bool   `json:"orphaned"`
+}
+
+// TestRemoveFromQueue_ClearsLocallyModifiedWhenPosterUnchanged covers the case
+// where the server already serves the exact bytes the local file holds:
+// savePoster reports errPosterUnchanged, which is a successful restore and must
+// still clear locally_modified — otherwise the item stays flagged as differing
+// from the server forever, showing "Get from {server}" on a card that matches.
+func TestRemoveFromQueue_ClearsLocallyModifiedWhenPosterUnchanged(t *testing.T) {
+	mock := defaultMock()
+	setup := newTestSetup(t, mock)
+	ctx := context.Background()
+
+	runImport(t, setup.handler, importBody)
+
+	localPoster := []byte("user-uploaded-poster")
+	simulateLocalChange(t, setup, "101", "movie", localPoster)
+
+	// The server serves back exactly what sits on disk — savePoster short-circuits
+	// with errPosterUnchanged instead of writing the file.
+	mock.downloadFunc = func(_ context.Context, itemID string) ([]byte, string, error) {
+		if itemID == "101" {
+			return localPoster, "jpg", nil
+		}
+		return []byte("fake-poster"), "jpg", nil
+	}
+
+	resp := runRemoveFromQueue(t, setup.handler, "101")
+	if resp.Warning != "" {
+		t.Fatalf("Warning: want empty, got %q", resp.Warning)
+	}
+
+	m, err := setup.queries.GetMediaByRatingKey(ctx, "101")
+	if err != nil {
+		t.Fatalf("GetMediaByRatingKey: %v", err)
+	}
+	if m.LocallyModified != 0 {
+		t.Errorf("locally_modified: want 0 after restore, got %d", m.LocallyModified)
+	}
+	if !m.Thumb.Valid || m.Thumb.String != "jpg" {
+		t.Errorf("thumb: want %q, got %v", "jpg", m.Thumb)
 	}
 }
