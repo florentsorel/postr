@@ -8,7 +8,7 @@ require (
 	github.com/lmittmann/tint v1.2.0
 	github.com/pressly/goose/v3 v3.28.0
 	golang.org/x/image v0.46.0
-	golang.org/x/sync v0.22.0
+	golang.org/x/sync v0.23.0
 	modernc.org/sqlite v1.58.0
 )
 
