@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	github.com/caarlos0/env/v11 v11.4.2
-	github.com/labstack/echo/v5 v5.4.6
+	github.com/labstack/echo/v5 v5.4.7
 	github.com/lmittmann/tint v1.2.1
 	github.com/pressly/goose/v3 v3.30.1
 	golang.org/x/image v0.48.0
